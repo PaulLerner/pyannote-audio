@@ -68,8 +68,9 @@ class SpeechTurnSegmentation(Pipeline):
     sad_scores : `Path` or 'oracle'
         Path to precomputed speech activity detection scores.
         Use 'oracle' to assume perfect speech activity detection.
-    scd_scores : `Path`
-        Path to precomputed speaker change detection scores
+    scd_scores : `Path` or 'oracle'
+        Path to precomputed SCD scores on disk.
+        Use 'oracle' to assume perfect speaker change detection.
     non_speech : `bool`
         Mark non-speech regions as speaker change. Defaults to True.
     purity : `float`, optional
@@ -77,7 +78,7 @@ class SpeechTurnSegmentation(Pipeline):
     """
 
     def __init__(self, sad_scores: Optional[Union[Path, str]] = None,
-                       scd_scores: Optional[Path] = None,
+                       scd_scores: Optional[Union[Path, str]] = None,
                        non_speech: Optional[bool] = True,
                        purity: Optional[float] = 0.95):
         super().__init__()
@@ -90,8 +91,12 @@ class SpeechTurnSegmentation(Pipeline):
                 scores=self.sad_scores)
 
         self.scd_scores = scd_scores
-        self.speaker_change_detection = SpeakerChangeDetection(
-            scores=self.scd_scores)
+        if self.scd_scores == 'oracle':
+            self.speaker_change_detection = None
+            self.speech_turn_segmentation = OracleSpeechTurnSegmentation()
+        else:
+            self.speaker_change_detection = SpeakerChangeDetection(
+                scores=self.scd_scores)
 
         self.non_speech = non_speech
         self.purity = purity
@@ -110,7 +115,10 @@ class SpeechTurnSegmentation(Pipeline):
         hypothesis : `pyannote.core.Annotation`
             Hypothesized speech turns
         """
-
+        if self.scd_scores == 'oracle':
+            speech_turns = self.speech_turn_segmentation(current_file)
+            return speech_turns
+            
         # speech regions
         sad = self.speech_activity_detection(current_file).get_timeline()
 
