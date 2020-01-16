@@ -99,11 +99,17 @@ class SpeakerIdentification(Pipeline):
 
         self.embedding = embedding
         self.metric = metric
-        if method:
+        self.method=method
+        if self.method:
+            self.speech_turn_clustering=SpeechTurnClustering(
+                embedding=self.embedding, metric=self.metric, method=self.method)
+
+            self.min_duration = Uniform(0, 10)
             self.speaker_diarization = SpeakerDiarization(self.sad_scores,
                 self.scd_scores, self.embedding, self.metric,
-                method, self.evaluation_only)
-            self.min_duration = Uniform(0, 10)
+                self.method, self.evaluation_only)
+            self.speaker_diarization.min_duration=self.min_duration
+            self.speaker_diarization.speech_turn_clustering=self.speech_turn_clustering
         else:
             self.speaker_diarization=None
 
