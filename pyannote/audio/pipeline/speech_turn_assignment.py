@@ -130,7 +130,7 @@ class SpeechTurnClosestAssignment(Pipeline):
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to closest class
-        assignments = self.closest_assignment(np.vstack(X_targets),
+        assignments, _ = self.closest_assignment(np.vstack(X_targets),
                                               np.vstack(X))
         mapping = {label: targets_labels[k]
                    for label, k in zip(assigned_labels, assignments)
