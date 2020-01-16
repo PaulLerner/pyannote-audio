@@ -37,11 +37,11 @@ from pyannote.metrics.identification import IdentificationErrorRate
 from .speech_turn_segmentation import SpeechTurnSegmentation
 from .speech_turn_clustering import SpeechTurnClustering
 from .speech_turn_assignment import SpeechTurnDatabaseAssignment
+from .speaker_diarization import SpeakerDiarization
 
 from typing import Optional
 from typing import Union
 from pyannote.pipeline import Pipeline
-from pyannote.pipeline import SpeakerDiarization
 from pyannote.pipeline.parameter import Uniform
 
 class SpeakerIdentification(Pipeline):
@@ -80,7 +80,7 @@ class SpeakerIdentification(Pipeline):
                        embedding: Optional[Path] = None,
                        metric: Optional[str] = 'cosine',
                        method: Optional[str] = None,
-                       evaluation_only: Optional[bool] = False
+                       evaluation_only: Optional[bool] = False,
                        credits: Optional[Path] = None):
 
         super().__init__()
