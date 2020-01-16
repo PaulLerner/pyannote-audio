@@ -71,6 +71,12 @@ class SpeakerIdentification(Pipeline):
         Uri of the Plumcot serie.
         If provided, the model will only assign labels that are in the relevant file.
         Defaults to None (i.e. the model can assign any label in the database)
+
+    Hyper-parameters
+    ----------------
+    min_duration : `float`
+        Do not cluster speech turns shorter than `min_duration`. Assign them to
+        the closest cluster (of long speech turns) instead.
     """
 
     def __init__(self, protocol_name: str,
@@ -97,6 +103,7 @@ class SpeakerIdentification(Pipeline):
             self.speaker_diarization = SpeakerDiarization(self.sad_scores,
                 self.scd_scores, self.embedding, self.metric,
                 method, self.evaluation_only)
+            self.min_duration = Uniform(0, 10)
         else:
             self.speaker_diarization=None
 
