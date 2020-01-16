@@ -44,7 +44,7 @@ class SpeechTurnClosestAssignment(Pipeline):
 
     Parameters
     ----------
-    embedding : `Path
+    embedding : `Path`
         Path to precomputed embeddings.
     metric : {'euclidean', 'cosine', 'angular'}, optional
         Metric used for comparing embeddings. Defaults to 'cosine'.
