@@ -38,13 +38,140 @@ from .utils import assert_int_labels
 from .utils import assert_string_labels
 from ..features import Precomputed
 
+import pyannote.database
+from Plumcot import Plumcot
+
+class SpeechTurnDatabaseAssignment(Pipeline):
+    """Assign speech turn to closest target in the whole database
+
+    Parameters
+    ----------
+    protocol_name : `str`
+        Name of speaker verification protocol
+    embedding : `Path`
+        Path to precomputed embeddings.
+    metric : {'euclidean', 'cosine', 'angular'}, optional
+        Metric used for comparing embeddings. Defaults to 'cosine'.
+    credits : `Path`, optional
+        Path to the `database` credits.
+        If provided, the model will only assign labels that are in
+        credits[current_file['uri']].
+        Defaults to None (i.e. the model can assign any label in the database)
+    """
+
+    def __init__(self, protocol_name: str,
+                       embedding: Optional[Path] = None,
+                       metric: Optional[str] = 'cosine',
+                       credits: Optional[Path] = None):
+        super().__init__()
+
+        self.embedding = embedding
+        self.precomputed_ = Precomputed(self.embedding)
+
+        self.metric = metric
+
+        self.closest_assignment = ClosestAssignment(metric=self.metric)
+        self.credits=credits
+        if self.credits:
+            db=Plumcot()
+            self.credits=db.read_credits(self.credits)
+
+    def __call__(self, current_file: dict,
+                       speech_turns: Annotation,
+                       subset: Optional[str] = 'train') -> Annotation:
+        """Assign each speech turn to closest target (if close enough)
+
+        Parameters
+        ----------
+        current_file : `dict`
+            File as provided by a pyannote.database protocol.
+        speech_turns : `Annotation`
+            Speech turns. Should only contain `int` labels.
+        subset : {'train', 'development', 'test'}, optional
+            Name of subset. Defaults to 'train'
+
+        Returns
+        -------
+        assigned : `Annotation`
+            Assigned speech turns.
+        """
+
+
+        assert_int_labels(speech_turns, 'speech_turns')
+
+        targets_dict = {}
+        #gather all target embeddings on the whole data subset
+        for current_file in getattr(protocol, subset)():
+            embedding = self.precomputed_(current_file)
+            targets=current_file['annotation']
+            assert_string_labels(targets, 'targets')
+            # gather targets embedding
+            labels = targets.labels()
+            for l, label in enumerate(labels):
+                if self.credits:#assist model : remove irrelevant targets
+                    if label not in self.credits[current_file['uri']]:
+                        continue
+
+                timeline = targets.label_timeline(label, copy=False)
+
+                # be more and more permissive until we have
+                # at least one embedding for current speech turn
+                for mode in ['strict', 'center', 'loose']:
+                    x = embedding.crop(timeline, mode=mode)
+                    if len(x) > 0:
+                        break
+
+                # skip labels so small we don't have any embedding for it
+                if len(x) < 1:
+                    continue
+                if label in targets_dict:
+                    targets_dict[label].append(x)
+                else:
+                    targets_dict[label]=x
+
+        X_targets, targets_labels = [],[]
+        #average embedding per target
+        for label, x in targets_dict.items():
+            targets_labels.append(label)
+            x=np.concatenate(x, axis=0)
+            X_targets.append(np.mean(x, axis=0))
+
+        # gather speech turns embedding
+        labels = speech_turns.labels()
+        X, assigned_labels, skipped_labels = [], [], []
+        for l, label in enumerate(labels):
+
+            timeline = speech_turns.label_timeline(label, copy=False)
+
+            # be more and more permissive until we have
+            # at least one embedding for current speech turn
+            for mode in ['strict', 'center', 'loose']:
+                x = embedding.crop(timeline, mode=mode)
+                if len(x) > 0:
+                    break
+
+            # skip labels so small we don't have any embedding for it
+            if len(x) < 1:
+                skipped_labels.append(label)
+                continue
+
+            assigned_labels.append(label)
+            X.append(np.mean(x, axis=0))
+
+        # assign speech turns to closest class
+        assignments, distances = self.closest_assignment(np.vstack(X_targets),
+                                                         np.vstack(X))
+        mapping = {label: targets_labels[k]
+                   for label, k in zip(assigned_labels, assignments)
+                   if not k < 0}
+        return speech_turns.rename_labels(mapping=mapping), distances
 
 class SpeechTurnClosestAssignment(Pipeline):
     """Assign speech turn to closest cluster
 
     Parameters
     ----------
-    embedding : `Path
+    embedding : `Path`
         Path to precomputed embeddings.
     metric : {'euclidean', 'cosine', 'angular'}, optional
         Metric used for comparing embeddings. Defaults to 'cosine'.
@@ -130,7 +257,7 @@ class SpeechTurnClosestAssignment(Pipeline):
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to closest class
-        assignments = self.closest_assignment(np.vstack(X_targets),
+        assignments, _ = self.closest_assignment(np.vstack(X_targets),
                                               np.vstack(X))
         mapping = {label: targets_labels[k]
                    for label, k in zip(assigned_labels, assignments)
