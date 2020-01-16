@@ -67,10 +67,9 @@ class SpeakerIdentification(Pipeline):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`
         Only process the evaluated regions. Default to False.
-    credits : `Path`, optional
-        Path to the `database` credits.
-        If provided, the model will only assign labels that are in
-        credits[current_file['uri']].
+    serie_uri : `str`, optional
+        Uri of the Plumcot serie.
+        If provided, the model will only assign labels that are in the relevant file.
         Defaults to None (i.e. the model can assign any label in the database)
     """
 
@@ -81,7 +80,7 @@ class SpeakerIdentification(Pipeline):
                        metric: Optional[str] = 'cosine',
                        method: Optional[str] = None,
                        evaluation_only: Optional[bool] = False,
-                       credits: Optional[Path] = None):
+                       serie_uri: Optional[str] = None):
 
         super().__init__()
         self.protocol_name = protocol_name
@@ -102,7 +101,7 @@ class SpeakerIdentification(Pipeline):
             self.speaker_diarization=None
 
         self.speech_turn_assignment = SpeechTurnDatabaseAssignment(self.protocol_name,
-            self.embedding, self.metric, credits)
+            self.embedding, self.metric, serie_uri)
 
     def __call__(self, current_file: dict, subset: Optional[str] = 'train') -> Annotation:
         """Apply speaker identification

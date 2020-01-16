@@ -52,17 +52,16 @@ class SpeechTurnDatabaseAssignment(Pipeline):
         Path to precomputed embeddings.
     metric : {'euclidean', 'cosine', 'angular'}, optional
         Metric used for comparing embeddings. Defaults to 'cosine'.
-    credits : `Path`, optional
-        Path to the `database` credits.
-        If provided, the model will only assign labels that are in
-        credits[current_file['uri']].
+    serie_uri : `str`, optional
+        Uri of the Plumcot serie.
+        If provided, the model will only assign labels that are in the relevant file.
         Defaults to None (i.e. the model can assign any label in the database)
     """
 
     def __init__(self, protocol_name: str,
                        embedding: Optional[Path] = None,
                        metric: Optional[str] = 'cosine',
-                       credits: Optional[Path] = None):
+                       serie_uri: Optional[str] = None):
         super().__init__()
 
         self.embedding = embedding
@@ -71,10 +70,10 @@ class SpeechTurnDatabaseAssignment(Pipeline):
         self.metric = metric
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
-        self.credits=credits
-        if self.credits:
+        self.serie_uri=serie_uri
+        if self.serie_uri:
             db=Plumcot()
-            self.credits=db.read_credits(self.credits)
+            self.characters=db.get_characters(self.serie_uri)
 
     def __call__(self, current_file: dict,
                        speech_turns: Annotation,
@@ -108,8 +107,8 @@ class SpeechTurnDatabaseAssignment(Pipeline):
             # gather targets embedding
             labels = targets.labels()
             for l, label in enumerate(labels):
-                if self.credits:#assist model : remove irrelevant targets
-                    if label not in self.credits[current_file['uri']]:
+                if self.characters:#assist model : remove irrelevant targets
+                    if label not in self.characters[current_file['uri']]:
                         continue
 
                 timeline = targets.label_timeline(label, copy=False)
