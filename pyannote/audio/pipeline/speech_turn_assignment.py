@@ -31,6 +31,7 @@ from typing import Optional
 from pathlib import Path
 import numpy as np
 
+from pyannote.database import get_protocol
 from pyannote.pipeline import Pipeline
 from pyannote.pipeline.blocks.classification import ClosestAssignment
 from pyannote.core import Annotation
@@ -40,6 +41,8 @@ from ..features import Precomputed
 
 import pyannote.database
 from Plumcot import Plumcot
+
+
 
 class SpeechTurnDatabaseAssignment(Pipeline):
     """Assign speech turn to closest target in the whole database
@@ -64,6 +67,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
                        serie_uri: Optional[str] = None):
         super().__init__()
 
+        self.protocol = get_protocol(protocol_name)
         self.embedding = embedding
         self.precomputed_ = Precomputed(self.embedding)
 
@@ -100,9 +104,12 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         targets_dict = {}
         #gather all target embeddings on the whole data subset
-        for current_file in getattr(protocol, subset)():
-            embedding = self.precomputed_(current_file)
-            targets=current_file['annotation']
+
+
+        for target_file in getattr(self.protocol, subset)():
+            target_embedding = self.precomputed_(target_file)
+            annotated=target_file['annotated']
+            targets=target_file['annotation'].crop(annotated,mode='intersection')
             assert_string_labels(targets, 'targets')
             # gather targets embedding
             labels = targets.labels()
@@ -116,7 +123,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
                 # be more and more permissive until we have
                 # at least one embedding for current speech turn
                 for mode in ['strict', 'center', 'loose']:
-                    x = embedding.crop(timeline, mode=mode)
+                    x = target_embedding.crop(timeline, mode=mode)
                     if len(x) > 0:
                         break
 
@@ -126,10 +133,11 @@ class SpeechTurnDatabaseAssignment(Pipeline):
                 if label in targets_dict:
                     targets_dict[label].append(x)
                 else:
-                    targets_dict[label]=x
+                    targets_dict[label]=[x]
 
         X_targets, targets_labels = [],[]
         #average embedding per target
+        embedding = self.precomputed_(current_file)
         for label, x in targets_dict.items():
             targets_labels.append(label)
             x=np.concatenate(x, axis=0)
