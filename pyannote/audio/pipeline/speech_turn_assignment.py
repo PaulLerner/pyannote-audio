@@ -145,7 +145,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         # gather speech turns embedding
         labels = speech_turns.labels()
-        X, assigned_labels, skipped_labels = [], [], []
+        X, assigned_labels, skipped_labels, timelines = [], [], [], []
         for l, label in enumerate(labels):
 
             timeline = speech_turns.label_timeline(label, copy=False)
@@ -163,6 +163,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
                 continue
 
             assigned_labels.append(label)
+            timelines.append(timeline)
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to closest class
@@ -171,7 +172,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
         mapping = {label: targets_labels[k]
                    for label, k in zip(assigned_labels, assignments)
                    if not k < 0}
-        return speech_turns.rename_labels(mapping=mapping), distances
+        return speech_turns.rename_labels(mapping=mapping), distances, timelines
 
 class SpeechTurnClosestAssignment(Pipeline):
     """Assign speech turn to closest cluster
