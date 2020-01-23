@@ -75,6 +75,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
         self.serie_uri=serie_uri
+        self.characters=None
         if self.serie_uri:
             db=Plumcot()
             self.characters=db.get_characters(self.serie_uri)
