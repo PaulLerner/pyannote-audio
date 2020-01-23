@@ -140,7 +140,7 @@ class SpeakerIdentification(Pipeline):
         return speech_turns, distances, timelines
 
     def write_id(self, file: TextIO, output: tuple):
-        """Write pipeline output to .id.rttm file
+        """Write pipeline output to 'id' file
 
         Parameters
         ----------
