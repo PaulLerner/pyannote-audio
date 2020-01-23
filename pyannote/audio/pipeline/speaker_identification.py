@@ -35,12 +35,12 @@ from pyannote.database import get_annotated
 from pyannote.metrics.identification import IdentificationErrorRate
 
 from .speech_turn_segmentation import SpeechTurnSegmentation
-from .speech_turn_clustering import SpeechTurnClustering
 from .speech_turn_assignment import SpeechTurnDatabaseAssignment
 from .speaker_diarization import SpeakerDiarization
 
 from typing import Optional
 from typing import Union
+from typing import TextIO
 from pyannote.pipeline import Pipeline
 from pyannote.pipeline.parameter import Uniform
 
@@ -71,12 +71,6 @@ class SpeakerIdentification(Pipeline):
         Uri of the Plumcot serie.
         If provided, the model will only assign labels that are in the relevant file.
         Defaults to None (i.e. the model can assign any label in the database)
-
-    Hyper-parameters
-    ----------------
-    min_duration : `float`
-        Do not cluster speech turns shorter than `min_duration`. Assign them to
-        the closest cluster (of long speech turns) instead.
     """
 
     def __init__(self, protocol_name: str,
@@ -96,25 +90,20 @@ class SpeakerIdentification(Pipeline):
             sad_scores=self.sad_scores,
             scd_scores=self.scd_scores)
         self.evaluation_only = evaluation_only
-
+        self.serie_uri=serie_uri
+        self.file_uri=1
         self.embedding = embedding
         self.metric = metric
         self.method=method
         if self.method:
-            self.speech_turn_clustering=SpeechTurnClustering(
-                embedding=self.embedding, metric=self.metric, method=self.method)
-
-            self.min_duration = Uniform(0, 10)
             self.speaker_diarization = SpeakerDiarization(self.sad_scores,
                 self.scd_scores, self.embedding, self.metric,
                 self.method, self.evaluation_only)
-            self.speaker_diarization.min_duration=self.min_duration
-            self.speaker_diarization.speech_turn_clustering=self.speech_turn_clustering
         else:
             self.speaker_diarization=None
 
         self.speech_turn_assignment = SpeechTurnDatabaseAssignment(self.protocol_name,
-            self.embedding, self.metric, serie_uri)
+            self.embedding, self.metric, self.serie_uri)
 
     def __call__(self, current_file: dict, subset: Optional[str] = 'train') -> Annotation:
         """Apply speaker identification
@@ -144,12 +133,42 @@ class SpeakerIdentification(Pipeline):
             if self.evaluation_only:
                 annotated = get_annotated(current_file)
                 speech_turns = speech_turns.crop(annotated, mode='intersection')
-            speech_turns.rename_labels(generator='int', copy=False)
+        speech_turns.rename_labels(generator='int', copy=False)
+        speech_turns, distances, timelines = self.speech_turn_assignment(current_file,
+                                                              speech_turns,
+                                                              subset)
+        return speech_turns, distances, timelines
 
-        speech_turns  = self.speech_turn_assignment(current_file,
-                                                   speech_turns,
-                                                   subset)
-        return speech_turns, distances
+    def write_id(self, file: TextIO, output: tuple):
+        """Write pipeline output to .id.rttm file
+
+        Parameters
+        ----------
+        file : file object
+        output : `pyannote.core.Timeline` or `pyannote.core.Annotation`
+            Pipeline output
+        """
+        speech_turns, distances, timelines = output
+        if isinstance(speech_turns, Annotation):
+            for timeline, distance in zip(timelines, distances):
+                speaker_timeline = speech_turns.crop(timeline)
+                for s, t, l in speaker_timeline.itertracks(yield_label=True):
+                    line = (
+                        f'SPEAKER {speech_turns.uri} 1 {s.start:.3f} {s.duration:.3f} '
+                        f'<NA> <NA> {l} <NA> {distance:.3f}\n'
+                    )
+                    file.write(line)
+            return
+
+        msg = (
+            f'Dumping {speech_turns.__class__.__name__} instances to "rttm" files '
+            f'is not supported.'
+        )
+        raise NotImplementedError(msg)
+
+    @property
+    def write_format(self):
+        return 'id'
 
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of identification error rate metric"""
