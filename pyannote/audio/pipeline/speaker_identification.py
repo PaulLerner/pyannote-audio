@@ -170,7 +170,7 @@ class SpeakerIdentification(Pipeline):
     def write_format(self):
         return 'id'
 
-    def get_metric(self) -> IdentificationErrorRate:
-        """Return new instance of identification error rate metric"""
-
-        return IdentificationErrorRate(collar=0.0, skip_overlap=False)
+    def get_metric(self):
+        #TODO : Return new instance of identification error rate metric
+        #(conflict because pipeline returns more than just Annotation)
+        raise NotImplementedError()
