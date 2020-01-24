@@ -145,8 +145,8 @@ class SpeakerIdentification(Pipeline):
         Parameters
         ----------
         file : file object
-        output : `pyannote.core.Timeline` or `pyannote.core.Annotation`
-            Pipeline output
+        output : (`pyannote.core.Annotation`, `np.ndarray`, `list`)
+            Pipeline outputs speech_turns, distances and timelines
         """
         speech_turns, distances, timelines = output
         if isinstance(speech_turns, Annotation):
@@ -161,7 +161,7 @@ class SpeakerIdentification(Pipeline):
             return
 
         msg = (
-            f'Dumping {speech_turns.__class__.__name__} instances to "rttm" files '
+            f'Dumping {speech_turns.__class__.__name__} instances to "id" files '
             f'is not supported.'
         )
         raise NotImplementedError(msg)
