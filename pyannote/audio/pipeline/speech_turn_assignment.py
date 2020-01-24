@@ -40,7 +40,6 @@ from .utils import assert_string_labels
 from ..features import Precomputed
 
 import pyannote.database
-from Plumcot import Plumcot
 
 
 
@@ -77,6 +76,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
         self.serie_uri=serie_uri
         self.characters=None
         if self.serie_uri:
+            from Plumcot import Plumcot
             db=Plumcot()
             self.characters=db.get_characters(self.serie_uri)
 
