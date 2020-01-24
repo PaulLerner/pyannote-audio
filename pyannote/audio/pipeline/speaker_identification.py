@@ -91,7 +91,6 @@ class SpeakerIdentification(Pipeline):
             scd_scores=self.scd_scores)
         self.evaluation_only = evaluation_only
         self.serie_uri=serie_uri
-        self.file_uri=1
         self.embedding = embedding
         self.metric = metric
         self.method=method
