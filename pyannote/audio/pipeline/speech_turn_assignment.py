@@ -138,7 +138,6 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         X_targets, targets_labels = [],[]
         #average embedding per target
-        embedding = self.precomputed_(current_file)
         for label, x in targets_dict.items():
             targets_labels.append(label)
             x=np.concatenate(x, axis=0)
@@ -146,6 +145,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         # gather speech turns embedding
         labels = speech_turns.labels()
+        embedding = self.precomputed_(current_file)
         X, assigned_labels, skipped_labels, timelines = [], [], [], []
         for l, label in enumerate(labels):
 
