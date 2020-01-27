@@ -32,6 +32,7 @@ from pathlib import Path
 import numpy as np
 
 from pyannote.database import get_protocol
+from pyannote.database import get_annotated
 from pyannote.pipeline import Pipeline
 from pyannote.pipeline.blocks.classification import ClosestAssignment
 from pyannote.core import Annotation
@@ -109,7 +110,7 @@ class SpeechTurnDatabaseAssignment(Pipeline):
 
         for target_file in getattr(self.protocol, subset)():
             target_embedding = self.precomputed_(target_file)
-            annotated=target_file['annotated']
+            annotated=get_annotated(target_file)
             targets=target_file['annotation'].crop(annotated,mode='intersection')
             assert_string_labels(targets, 'targets')
             # gather targets embedding
