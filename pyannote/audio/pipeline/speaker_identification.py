@@ -150,13 +150,8 @@ class SpeakerIdentification(Pipeline):
         speech_turns, distances, timelines = output
         if isinstance(speech_turns, Annotation):
             for timeline, distance in zip(timelines, distances):
-                speaker_timeline = speech_turns.crop(timeline)
-                previous_segment=None
+                speaker_timeline = speech_turns.crop(timeline).support()
                 for s, t, l in speaker_timeline.itertracks(yield_label=True):
-                    if s==previous_segment:
-                        #HACK: write overlapped speech only once per timeline
-                        continue
-                    previous_segment=s
                     line = (
                         f'SPEAKER {speech_turns.uri} 1 {s.start:.3f} {s.duration:.3f} '
                         f'<NA> <NA> {l} <NA> {distance:.3f}\n'
