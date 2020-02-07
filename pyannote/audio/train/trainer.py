@@ -36,6 +36,7 @@ from pyannote.audio.train.checkpoint import Checkpoint
 from tensorboardX import SummaryWriter
 from .logging import Logging
 from .callback import Callbacks
+import warnings
 
 ARBITRARY_LR = 0.1
 
@@ -71,8 +72,10 @@ class Trainer:
         optimizer_state = torch.load(
             self.OPTIMIZER_PT.format(log_dir=self.log_dir_, epoch=epoch),
             map_location=lambda storage, loc: storage)
-        self.optimizer_.load_state_dict(optimizer_state)
-
+        try:
+            self.optimizer_.load_state_dict(optimizer_state)
+        except ValueError as e:
+            warnings.warn(f"ValueError: {e} \nNot loading optimizer state_dict")
         self.epoch_ = epoch
 
     def save_epoch(self, epoch=None):
