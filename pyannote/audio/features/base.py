@@ -29,7 +29,6 @@
 import warnings
 import numpy as np
 
-from .utils import RawAudio
 
 from pyannote.core import Segment
 from pyannote.core import SlidingWindow
@@ -37,8 +36,16 @@ from pyannote.core import SlidingWindowFeature
 
 from pyannote.database import get_unique_identifier
 
-from librosa.util import valid_audio
-from librosa.util.exceptions import ParameterError
+try:    
+    from .utils import RawAudio
+    from librosa.util import valid_audio
+    from librosa.util.exceptions import ParameterError
+except Exception as e:
+        msg = (
+            f'Feature extractors based on "librosa" are not available '
+            f'because something went wrong when importing them: "{e}".')
+        print(msg)
+
 
 
 class FeatureExtraction(object):

@@ -37,5 +37,5 @@ from .speaker_diarization import SpeakerDiarization
 
 try:
     from .resegmentation import Resegmentation
-except NotImplementedError:
+except Exception:
     pass
