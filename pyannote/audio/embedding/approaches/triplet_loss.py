@@ -109,8 +109,8 @@ class TripletLoss(EmbeddingApproach):
             raise ValueError(msg)
         self.clamp = clamp
 
-        if sampling not in {'all', 'hard', 'negative', 'easy'}:
-            msg = "'sampling' must be one of {'all', 'hard', 'negative', 'easy'}."
+        if sampling not in {'all', 'hard', 'negative', 'easy', 'constraints'}:
+            msg = "'sampling' must be one of {'all', 'hard', 'negative', 'easy', 'constraints'}."
             raise ValueError(msg)
         self.sampling = sampling
 
@@ -267,6 +267,59 @@ class TripletLoss(EmbeddingApproach):
 
         return anchors, positives, negatives
 
+    def batch_constraints(self, y, distances):
+        """Build all possible triplet from annotation with negative labels
+        e.g. 'Bob is not speaking' -> '!Bob'
+             'Bob is speaking' -> 'Bob'
+
+        Parameters
+        ----------
+        y : list
+            Sequence labels.
+        distances : (n * (n-1) / 2,) torch.Tensor
+            Condensed pairwise distance matrix
+
+        Returns
+        -------
+        anchors, positives, negatives : list of int
+            Triplets indices.
+        """
+
+        anchors, positives, negatives = [], [], []
+
+        for anchor, y_anchor in enumerate(y):
+
+            #negative labels cannot be anchors
+            if is_negative(y_anchor):
+                continue
+
+            for positive, y_positive in enumerate(y):
+
+                # if same embedding or different labels, skip
+                if (anchor == positive) or (y_anchor != y_positive):
+                    continue
+
+                for negative, y_negative in enumerate(y):
+
+                    #same label cannot be negative example
+                    if y_negative == y_anchor:
+                        continue
+
+                    if is_negative(y_negative):
+                        negative_label = get_label(y_negative)
+
+                        #negative labels cannot be used as negative examples for
+                        #anything but their positive labels. e.g. '!Bob' is a negative
+                        #example for 'Bob' but not for 'Alice'
+                        if negative_label != y_anchor:
+                            continue
+
+                    anchors.append(anchor)
+                    positives.append(positive)
+                    negatives.append(negative)
+
+        return anchors, positives, negatives
+
     def triplet_loss(self, distances, anchors, positives, negatives,
                      return_delta=False):
         """Compute triplet loss
@@ -384,3 +437,13 @@ class TripletLoss(EmbeddingApproach):
 
         # average over all triplets
         return {'loss': torch.mean(losses)}
+
+def is_negative(label):
+    """Label are negative iff they start with '!'
+    """
+    return label[0] == "!"
+
+def get_label(label):
+    """Negative labels start with '!'
+    """
+    return label[1:] if is_negative(label) else label
