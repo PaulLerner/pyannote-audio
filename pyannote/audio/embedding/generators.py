@@ -207,12 +207,12 @@ class SpeechSegmentGenerator(BatchGenerator):
                     for chunk in itertools.islice(
                         random_subsegment(segment, self.duration),
                         self.per_turn):
-
                         yield {
                             'X': self.feature_extraction.crop(
                                 files[i], chunk, mode='center',
                                 fixed=self.duration),
                             'y': self.segment_labels_.index(label),
+                            'labels':label
                         }
 
     @property

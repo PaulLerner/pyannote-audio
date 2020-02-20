@@ -428,7 +428,9 @@ class TripletLoss(EmbeddingApproach):
 
         # sample triplets
         triplets = getattr(self, 'batch_{0}'.format(self.sampling))
-        anchors, positives, negatives = triplets(y, distances)
+        # HACK: why do we give 'y' in the first place ?
+        labels = batch['labels'] if self.sampling == 'constraints' else y
+        anchors, positives, negatives = triplets(labels, distances)
 
         # compute loss for each triplet
         losses, deltas, _, _ = self.triplet_loss(
