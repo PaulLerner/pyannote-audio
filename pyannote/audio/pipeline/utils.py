@@ -32,6 +32,8 @@ from pathlib import Path
 from pyannote.core import Annotation
 from pyannote.pipeline import Pipeline
 from pyannote.core.utils.helper import get_class_by_name
+from pyannote.database.util import get_protocol
+from pyannote.audio.features.wrapper import Wrapper, Wrappable
 
 
 def assert_string_labels(annotation: Annotation, name: str):
@@ -63,6 +65,83 @@ def assert_int_labels(annotation: Annotation, name: str):
         msg = f"{name} must contain `int` labels only."
         raise ValueError(msg)
 
+def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}):
+    """Gets references from protocol
+    Parameters
+    ----------
+    protocol: str
+    model: Wrappable, optional
+        Describes how raw speaker embeddings should be obtained.
+        See pyannote.audio.features.wrapper.Wrapper documentation for details.
+        Defaults to "@emb" that indicates that protocol files provide
+        the scores in the "emb" key.
+    subsets: set, optional
+        which protocol subset to get reference from.
+        Defaults to {'train'}
+
+    Returns
+    -------
+    references : dict
+        a dict like {identity : embeddings}
+        with embeddings being a list of embeddings
+    """
+    references = {}
+    protocol = get_protocol(protocol)
+    model = Wrapper(model)
+    for subset in subsets:
+        for current_file in getattr(protocol, subset)():
+            embedding = model(current_file)
+            annotation = current_file['annotation']
+            labels = annotation.labels()
+            for l, label in enumerate(labels):
+                timeline = targets.label_timeline(label, copy=False)
+
+                # be more and more permissive until we have
+                # at least one embedding for current speech turn
+                for mode in ['strict', 'center', 'loose']:
+                    x = embedding.crop(timeline, mode=mode)
+                    if len(x) > 0:
+                        break
+
+                # skip labels so small we don't have any embedding for it
+                if len(x) < 1:
+                    continue
+
+                #average speech turn embeddings
+                x = np.mean(x, axis=0)
+
+                #append reference to the references
+                references.setdefault(label,[])
+                references[label].append(x)
+    return references
+
+def update_references(current_file: dict,
+                      annotation: Annotation,
+                      model: Wrappable = "@emb",
+                      references = {}):
+    """Updates references from annotation"""
+    annotation = current_file['annotation']
+    model = Wrapper(model)
+    embedding = model(current_file)
+    labels = annotation.labels()
+    for l, label in enumerate(labels):
+        timeline = targets.label_timeline(label, copy=False)
+
+        # be more and more permissive until we have
+        # at least one embedding for current speech turn
+        for mode in ['strict', 'center', 'loose']:
+            x = embedding.crop(timeline, mode=mode)
+            if len(x) > 0:
+                break
+
+        # skip labels so small we don't have any embedding for it
+        if len(x) < 1:
+            continue
+
+        #append reference to the references
+        references.setdefault(label,[])
+        references[label].append(x)
+    return references
 
 def load_pretrained_pipeline(train_dir: Path) -> Pipeline:
     """Load pretrained pipeline
