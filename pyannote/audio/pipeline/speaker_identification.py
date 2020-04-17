@@ -124,17 +124,17 @@ class SpeakerIdentification(Pipeline):
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
 
-    def __call__(self, current_file: dict, use_thresholds: bool = False) -> Annotation:
+    def __call__(self, current_file: dict, use_threshold: bool = True) -> Annotation:
         """Apply speaker identification
 
         Parameters
         ----------
         current_file : `dict`
             File as provided by a pyannote.database protocol.
-        use_thresholds : `bool`, optional
-            closest_assignment threshold is ignored
-            -> all segments are assigned to the closest reference.
-            Defaults to False.
+        use_threshold : `bool`, optional
+            Ignores `closest_assignment.threshold` if False
+            -> sample embeddings are assigned to the closest target no matter the distance
+            Defaults to True.
 
         Returns
         -------
@@ -156,9 +156,9 @@ class SpeakerIdentification(Pipeline):
 
         # gather targets embedding
         X_targets, targets_labels = [], []
-        #average embeddings per reference
         for label, embeddings in self.references.items():
             targets_labels.append(label)
+            #average embeddings per reference
             X_targets.append(np.mean(embeddings, axis=0))
 
         #gather inference embeddings
@@ -184,13 +184,17 @@ class SpeakerIdentification(Pipeline):
                 continue
 
             assigned_labels.append(label)
+
+            #average speech turn embeddings
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to closest class
-        assignments = self.closest_assignment(np.vstack(X_targets), np.vstack(X))
+        assignments = self.closest_assignment(np.vstack(X_targets),
+                                              np.vstack(X),
+                                              use_threshold = use_threshold)
         mapping = {
-            label: '?'
-            if (k < 0 and use_thresholds) else targets_labels[k]
+            label: targets_labels[k]
+            if not k < 0 else '?'
             for label, k in zip(assigned_labels, assignments)
         }
         return speech_turns.rename_labels(mapping=mapping)
