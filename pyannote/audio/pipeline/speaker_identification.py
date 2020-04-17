@@ -44,7 +44,7 @@ from pyannote.pipeline.blocks.classification import ClosestAssignment
 from pyannote.pipeline import Pipeline
 from pyannote.pipeline.parameter import Uniform
 from pyannote.audio.features.wrapper import Wrapper, Wrappable
-
+from .utils import get_references
 
 class SpeakerIdentification(Pipeline):
     """Speaker identification pipeline
@@ -98,10 +98,9 @@ class SpeakerIdentification(Pipeline):
 
         super().__init__()
         if isinstance(references, Text):
-            msg = (f'At this point, the protocol {references} should be loaded '
-                    'in `self.references`, although it is not implemented.')
-            raise NotImplementedError(msg)
-        self.references = references
+            self.references = get_references(references, embedding)
+        else:
+            self.references = references
         self.sad_scores = sad_scores
         self.scd_scores = scd_scores
         if self.scd_scores == "oracle":
