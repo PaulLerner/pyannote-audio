@@ -25,7 +25,9 @@
 
 # AUTHORS
 # Hervé BREDIN - http://herve.niderb.fr
+# Paul LERNER
 
+import numpy as np
 from pathlib import Path
 from typing import Optional
 from typing import Union
@@ -79,8 +81,6 @@ class SpeakerIdentification(Pipeline):
         files provide the embeddings in the "emb" key.
     metric : {'euclidean', 'cosine', 'angular'}, optional
         Metric used for comparing embeddings. Defaults to 'cosine'.
-    method : {'pool', 'affinity_propagation'}
-        Clustering method. Defaults to 'pool'.
     evaluation_only : `bool`
         Only process the evaluated regions. Default to False.
     """
@@ -92,7 +92,6 @@ class SpeakerIdentification(Pipeline):
         scd_scores: Union[Text, Path] = None,
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
-        method: Optional[str] = "pool",
         evaluation_only: Optional[bool] = False
     ):
 
@@ -118,14 +117,10 @@ class SpeakerIdentification(Pipeline):
                 sad_scores=self.sad_scores, scd_scores=self.scd_scores
             )
         self.evaluation_only = evaluation_only
-        self.purity = purity
-
-        self.min_duration = Uniform(0, 10)
 
         self.embedding = embedding
         self._embedding = Wrapper(self.embedding)
         self.metric = metric
-        self.method = method
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
 
@@ -195,8 +190,8 @@ class SpeakerIdentification(Pipeline):
         assignments = self.closest_assignment(np.vstack(X_targets), np.vstack(X))
         mapping = {
             label: '?'
+            if (k < 0 and use_thresholds) else targets_labels[k]
             for label, k in zip(assigned_labels, assignments)
-            if k < 0 and use_thresholds else targets_labels[k]
         }
         return speech_turns.rename_labels(mapping=mapping)
 

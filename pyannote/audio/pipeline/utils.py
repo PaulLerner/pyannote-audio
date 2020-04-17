@@ -25,16 +25,17 @@
 
 # AUTHORS
 # Hervé BREDIN - http://herve.niderb.fr
+# Paul LERNER
 
-
+import numpy as np
 import yaml
 from pathlib import Path
 from pyannote.core import Annotation
 from pyannote.pipeline import Pipeline
 from pyannote.core.utils.helper import get_class_by_name
-from pyannote.database.util import get_protocol
+from pyannote.database import get_protocol
 from pyannote.audio.features.wrapper import Wrapper, Wrappable
-
+from pyannote.database import FileFinder
 
 def assert_string_labels(annotation: Annotation, name: str):
     """Check that annotation only contains string labels
@@ -86,7 +87,8 @@ def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}
         with embeddings being a list of embeddings
     """
     references = {}
-    protocol = get_protocol(protocol)
+    preprocessors = {'audio': FileFinder()}
+    protocol = get_protocol(protocol, preprocessors=preprocessors)
     model = Wrapper(model)
     for subset in subsets:
         for current_file in getattr(protocol, subset)():
@@ -94,7 +96,7 @@ def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}
             annotation = current_file['annotation']
             labels = annotation.labels()
             for l, label in enumerate(labels):
-                timeline = targets.label_timeline(label, copy=False)
+                timeline = annotation.label_timeline(label, copy=False)
 
                 # be more and more permissive until we have
                 # at least one embedding for current speech turn
@@ -125,7 +127,7 @@ def update_references(current_file: dict,
     embedding = model(current_file)
     labels = annotation.labels()
     for l, label in enumerate(labels):
-        timeline = targets.label_timeline(label, copy=False)
+        timeline = annotation.label_timeline(label, copy=False)
 
         # be more and more permissive until we have
         # at least one embedding for current speech turn
