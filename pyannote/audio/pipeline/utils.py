@@ -138,6 +138,9 @@ def update_references(current_file: dict,
         if len(x) < 1:
             continue
 
+        #average speech turn embeddings
+        x = np.mean(x, axis=0)
+        
         #append reference to the references
         references.setdefault(label,[])
         references[label].append(x)
