@@ -194,7 +194,7 @@ class SpeakerIdentification(Pipeline):
                                               use_threshold = use_threshold)
         mapping = {
             label: targets_labels[k]
-            if not k < 0 else '?'
+            if not k < 0 else k
             for label, k in zip(assigned_labels, assignments)
         }
         return speech_turns.rename_labels(mapping=mapping)
