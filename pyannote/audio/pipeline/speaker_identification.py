@@ -56,6 +56,12 @@ class SpeakerIdentification(Pipeline):
     references : dict or Text
         Either a dict like {identity : features}
         or the name of a pyannote protocol which should be loaded like this.
+    subsets: set, optional
+        which protocol subset to get reference from.
+        Defaults to {'train'}
+    label_min_duration: float or int, optional
+        Only keep speaker with at least `label_min_duration` of annotated data.
+        Defaults to keep every speaker (i.e. 0.0)
     sad_scores : Text or Path or 'oracle', optional
         Describes how raw speech activity detection scores
         should be obtained. It can be either the name of a torch.hub model, or
@@ -88,6 +94,8 @@ class SpeakerIdentification(Pipeline):
     def __init__(
         self,
         references : Union[dict, Text],
+        subsets : set = {'train'},
+        label_min_duration : Union[float, int] = 0.0,
         sad_scores: Union[Text, Path] = None,
         scd_scores: Union[Text, Path] = None,
         embedding: Union[Text, Path] = None,
@@ -97,7 +105,10 @@ class SpeakerIdentification(Pipeline):
 
         super().__init__()
         if isinstance(references, Text):
-            self.references = get_references(references, embedding)
+            self.references = get_references(references,
+                                             embedding,
+                                             subsets,
+                                             label_min_duration)
         else:
             self.references = references
         self.sad_scores = sad_scores

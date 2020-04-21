@@ -66,7 +66,10 @@ def assert_int_labels(annotation: Annotation, name: str):
         msg = f"{name} must contain `int` labels only."
         raise ValueError(msg)
 
-def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}):
+def get_references(protocol: str,
+                   model: Wrappable = "@emb",
+                   subsets: set = {'train'},
+                   label_min_duration: Union[float, int] = 0.0):
     """Gets references from protocol
     Parameters
     ----------
@@ -79,6 +82,9 @@ def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}
     subsets: set, optional
         which protocol subset to get reference from.
         Defaults to {'train'}
+    label_min_duration: float or int, optional
+        Only keep speaker with at least `label_min_duration` of annotated data.
+        Defaults to keep every speaker (i.e. 0.0)
 
     Returns
     -------
@@ -86,7 +92,7 @@ def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}
         a dict like {identity : embeddings}
         with embeddings being a list of embeddings
     """
-    references = {}
+    references, durations = {}, {}
     preprocessors = {'audio': FileFinder()}
     protocol = get_protocol(protocol, preprocessors=preprocessors)
     model = Wrapper(model)
@@ -115,6 +121,14 @@ def get_references(protocol: str, model: Wrappable = "@emb", subsets = {'train'}
                 #append reference to the references
                 references.setdefault(label,[])
                 references[label].append(x)
+
+                #keep track of label duration
+                durations.setdefault(label,0.)
+                durations[label]+=timeline.duration()
+
+    #filter out labels based on label_min_duration
+    references = {speaker:embeddings for speaker,embeddings in references.items()
+                                     if durations[speaker] > label_min_duration}
     return references
 
 def update_references(current_file: dict,
