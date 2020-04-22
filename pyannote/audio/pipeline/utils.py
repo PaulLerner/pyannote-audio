@@ -69,7 +69,7 @@ def assert_int_labels(annotation: Annotation, name: str):
 def get_references(protocol: str,
                    model: Wrappable = "@emb",
                    subsets: set = {'train'},
-                   label_min_duration: Union[float, int] = 0.0):
+                   label_min_duration: float = 0.0):
     """Gets references from protocol
     Parameters
     ----------
