@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Optional
 from typing import Union
 from typing import Text
+from numbers import Number
 
 from pyannote.core import Annotation
 from pyannote.database import get_annotated
@@ -89,6 +90,9 @@ class SpeakerIdentification(Pipeline):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`, optional
         Only process the evaluated regions. Default to False.
+    confusion : `bool`, optional
+        Evaluate only confusion -> remove unknown speakers from hypothesis
+        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
     """
 
     def __init__(
@@ -100,7 +104,8 @@ class SpeakerIdentification(Pipeline):
         scd_scores: Union[Text, Path] = None,
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
-        evaluation_only: Optional[bool] = False
+        evaluation_only: Optional[bool] = False,
+        confusion = False
     ):
 
         super().__init__()
@@ -128,6 +133,7 @@ class SpeakerIdentification(Pipeline):
                 sad_scores=self.sad_scores, scd_scores=self.scd_scores
             )
         self.evaluation_only = evaluation_only
+        self.confusion = confusion
 
         self.embedding = embedding
         self._embedding = Wrapper(self.embedding)
@@ -152,7 +158,6 @@ class SpeakerIdentification(Pipeline):
         hypothesis : `pyannote.core.Annotation`
             Speaker identification output.
         """
-
         # segmentation into speech turns
         speech_turns = self.speech_turn_segmentation(current_file)
 
@@ -208,12 +213,25 @@ class SpeakerIdentification(Pipeline):
             if not k < 0 else k
             for label, k in zip(assigned_labels, assignments)
         }
-        return speech_turns.rename_labels(mapping=mapping)
+        speech_turns.rename_labels(mapping=mapping, copy = False)
+
+        if self.confusion:
+            #remove unknown speakers from hypothesis
+            hypothesis = speech_turns.empty()
+            for segment, track, label in speech_turns.itertracks(yield_label=True):
+                # unknown speaker (=) label < 0
+                if not (isinstance(label, Number) and label < 0):
+                    hypothesis[segment, track] = label
+            return hypothesis
+
+        return speech_turns
 
     def get_metric(self) -> IdentificationErrorRate:
-        """Return new instance of diarization error rate metric"""
+        """Return new instance of identification error rate metric"""
+        miss, false_alarm = (0., 0.) if self.confusion else (1., 1.)
 
-        return IdentificationErrorRate(collar=0.0, skip_overlap=False)
+        return IdentificationErrorRate(confusion=1., miss=miss, false_alarm=false_alarm,
+                                       collar=0.0, skip_overlap=False)
 
 
 class SpeakerIdentificationKNN(SpeakerIdentification):
@@ -257,6 +275,9 @@ class SpeakerIdentificationKNN(SpeakerIdentification):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`, optional
         Only process the evaluated regions. Default to False.
+    confusion : `bool`, optional
+        Evaluate only confusion -> remove unknown speakers from hypothesis
+        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
     """
 
     def __init__(
@@ -268,11 +289,12 @@ class SpeakerIdentificationKNN(SpeakerIdentification):
         scd_scores: Union[Text, Path] = None,
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
-        evaluation_only: Optional[bool] = False
+        evaluation_only: Optional[bool] = False,
+        confusion = False
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
-                         embedding, metric, evaluation_only)
+                         embedding, metric, evaluation_only, confusion)
         self.classifier = KNN(self.metric)
 
     def __call__(self, current_file: dict, use_threshold: bool = True) -> Annotation:
@@ -343,7 +365,16 @@ class SpeakerIdentificationKNN(SpeakerIdentification):
                                       np.vstack(X),
                                       targets_labels,
                                       use_threshold = use_threshold)
-        mapping = {label: target_label
-                   for label, target_label in zip(assigned_labels, assignments)}
+        mapping = dict(zip(assigned_labels, assignments))
+        speech_turns.rename_labels(mapping=mapping, copy = False)
 
-        return speech_turns.rename_labels(mapping=mapping)
+        if self.confusion:
+            #remove unknown speakers from hypothesis
+            hypothesis = speech_turns.empty()
+            for segment, track, label in speech_turns.itertracks(yield_label=True):
+                # unknown speaker (=) label < 0
+                if not (isinstance(label, Number) and label < 0):
+                    hypothesis[segment, track] = label
+            return hypothesis
+
+        return speech_turns
