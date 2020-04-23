@@ -228,7 +228,9 @@ class SpeakerIdentification(Pipeline):
 
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of identification error rate metric"""
-        miss, false_alarm = (0., 0.) if self.confusion else (1., 1.)
+        # HACK: set miss, false_alarm to 0.1 because empty annotation gets confusion = 0.0
+        # -> pipeline optimizes to get only unknown speakers (=) empty annotation
+        miss, false_alarm = (0.1, 0.1) if self.confusion else (1., 1.)
 
         return IdentificationErrorRate(confusion=1., miss=miss, false_alarm=false_alarm,
                                        collar=0.0, skip_overlap=False)
