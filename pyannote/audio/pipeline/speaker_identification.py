@@ -169,16 +169,17 @@ class SupervisedSpeakerIdentification(Pipeline):
 
         if self.confusion:
             #remove unknown speakers from hypothesis
-            self.remove_unknown(speech_turns)
+            speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
 
     def remove_unknown(self, hypothesis):
+        result = hypothesis.empty()
         for segment, track, label in hypothesis.itertracks(yield_label=True):
             # unknown speaker (=) label < 0
-            if isinstance(label, Number) and label < 0:
-                del hypothesis[segment, track]
+            if not(isinstance(label, Number) and label < 0):
+                result[segment, track] = label
 
-        return hypothesis
+        return result
 
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of identification error rate metric"""
@@ -329,7 +330,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
 
         if self.confusion:
             #remove unknown speakers from hypothesis
-            self.remove_unknown(speech_turns)
+            speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
 
 class KNearestSpeakers(SupervisedSpeakerIdentification):
@@ -468,5 +469,5 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
 
         if self.confusion:
             #remove unknown speakers from hypothesis
-            self.remove_unknown(speech_turns)
+            speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
