@@ -105,7 +105,7 @@ def get_references(protocol: str,
                 timeline = annotation.label_timeline(label, copy=False)
 
                 # be more and more permissive until we have
-                # at least one embedding for current speech turn
+                # at least one embedding for current label
                 for mode in ['strict', 'center', 'loose']:
                     x = embedding.crop(timeline, mode=mode)
                     if len(x) > 0:
@@ -136,7 +136,6 @@ def update_references(current_file: dict,
                       model: Wrappable = "@emb",
                       references = {}):
     """Updates references from annotation"""
-    annotation = current_file['annotation']
     model = Wrapper(model)
     embedding = model(current_file)
     labels = annotation.labels()
@@ -144,7 +143,7 @@ def update_references(current_file: dict,
         timeline = annotation.label_timeline(label, copy=False)
 
         # be more and more permissive until we have
-        # at least one embedding for current speech turn
+        # at least one embedding for current label
         for mode in ['strict', 'center', 'loose']:
             x = embedding.crop(timeline, mode=mode)
             if len(x) > 0:
@@ -154,7 +153,7 @@ def update_references(current_file: dict,
         if len(x) < 1:
             continue
 
-        #average speech turn embeddings
+        #average label embeddings
         x = np.mean(x, axis=0)
 
         #append reference to the references
