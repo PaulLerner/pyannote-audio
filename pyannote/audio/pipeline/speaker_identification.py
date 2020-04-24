@@ -49,8 +49,8 @@ from pyannote.pipeline.parameter import Uniform
 from pyannote.audio.features.wrapper import Wrapper, Wrappable
 from .utils import get_references
 
-class SpeakerIdentification(Pipeline):
-    """Speaker identification pipeline
+class SupervisedSpeakerIdentification(Pipeline):
+    """Base class for Supervised Speaker identification pipelines
 
     Parameters
     ----------
@@ -139,6 +139,118 @@ class SpeakerIdentification(Pipeline):
         self._embedding = Wrapper(self.embedding)
         self.metric = metric
 
+    def __call__(self, current_file: dict) -> Annotation:
+        """Prototype function to apply speaker identification
+        Notably shows usage of evaluation_only and confusion
+
+        Parameters
+        ----------
+        current_file : `dict`
+            File as provided by a pyannote.database protocol.
+
+        Returns
+        -------
+        hypothesis : `pyannote.core.Annotation`
+            Speaker identification output.
+        """
+        raise NotImplementedError(f'Sub-classes of {self.__class__.__name__} should '
+                                  f'implement their own __call__ method')
+        # segmentation into speech turns
+        speech_turns = self.speech_turn_segmentation(current_file)
+
+        # some files are only partially annotated and therefore one cannot
+        # evaluate speaker diarization results on the whole file.
+        # this option simply avoids trying to cluster those
+        # (potentially messy) un-annotated refions by focusing only on
+        # speech turns contained in the annotated regions.
+        if self.evaluation_only:
+            annotated = get_annotated(current_file)
+            speech_turns = speech_turns.crop(annotated, mode="intersection")
+
+        if self.confusion:
+            #remove unknown speakers from hypothesis
+            self.remove_unknown(speech_turns)
+        return speech_turns
+
+    def remove_unknown(self, hypothesis):
+        for segment, track, label in hypothesis.itertracks(yield_label=True):
+            # unknown speaker (=) label < 0
+            if isinstance(label, Number) and label < 0:
+                del hypothesis[segment, track]
+
+        return hypothesis
+
+    def get_metric(self) -> IdentificationErrorRate:
+        """Return new instance of identification error rate metric"""
+        # HACK: set miss, false_alarm to 0.1 because empty annotation gets confusion = 0.0
+        # -> pipeline optimizes to get only unknown speakers (=) empty annotation
+        miss, false_alarm = (0.1, 0.1) if self.confusion else (1., 1.)
+
+        return IdentificationErrorRate(confusion=1., miss=miss, false_alarm=false_alarm,
+                                       collar=0.0, skip_overlap=False)
+
+class ClosestSpeaker(SupervisedSpeakerIdentification):
+    """Speaker identification pipeline
+
+    Parameters
+    ----------
+    references : dict or Text
+        Either a dict like {identity : features}
+        or the name of a pyannote protocol which should be loaded like this.
+    subsets: set, optional
+        which protocol subset to get reference from.
+        Defaults to {'train'}
+    label_min_duration: float or int, optional
+        Only keep speaker with at least `label_min_duration` of annotated data.
+        Defaults to keep every speaker (i.e. 0.0)
+    sad_scores : Text or Path or 'oracle', optional
+        Describes how raw speech activity detection scores
+        should be obtained. It can be either the name of a torch.hub model, or
+        the path to the output of the validation step of a model trained
+        locally, or the path to scores precomputed on disk.
+        Defaults to "@sad_scores", indicating that protocol
+        files provide the scores in the corresponding "sad_scores" key.
+        Use 'oracle' to assume perfect speech activity detection.
+    scd_scores : Text or Path or 'oracle', optional
+        Describes how raw speaker change detection scores
+        should be obtained. It can be either the name of a torch.hub model, or
+        the path to the output of the validation step of a model trained
+        locally, or the path to scores precomputed on disk.
+        Defaults to "@scd_scores", indicating that protocol
+        files provide the scores in the corresponding "scd_scores" key.
+        Use 'oracle' to assume perfect speech turn segmentation,
+        `sad_scores` should then be set to 'oracle' too.
+    embedding : Text or Path, optional
+        Describes how raw speaker embeddings should be obtained. It can be
+        either the name of a torch.hub model, or the path to the output of the
+        validation step of a model trained locally, or the path to embeddings
+        precomputed on disk. Defaults to "@emb" that indicates that protocol
+        files provide the embeddings in the "emb" key.
+    metric : {'euclidean', 'cosine', 'angular'}, optional
+        Metric used for comparing embeddings. Defaults to 'cosine'.
+    evaluation_only : `bool`, optional
+        Only process the evaluated regions. Default to False.
+    confusion : `bool`, optional
+        Evaluate only confusion -> remove unknown speakers from hypothesis
+        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
+    """
+
+    def __init__(
+        self,
+        references : Union[dict, Text],
+        subsets : set = {'train'},
+        label_min_duration : Union[float, int] = 0.0,
+        sad_scores: Union[Text, Path] = None,
+        scd_scores: Union[Text, Path] = None,
+        embedding: Union[Text, Path] = None,
+        metric: Optional[str] = "cosine",
+        evaluation_only: Optional[bool] = False,
+        confusion = False
+    ):
+
+        super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
+                         embedding, metric, evaluation_only, confusion)
+
         self.closest_assignment = ClosestAssignment(metric=self.metric)
 
     def __call__(self, current_file: dict, use_threshold: bool = True) -> Annotation:
@@ -217,26 +329,10 @@ class SpeakerIdentification(Pipeline):
 
         if self.confusion:
             #remove unknown speakers from hypothesis
-            hypothesis = speech_turns.empty()
-            for segment, track, label in speech_turns.itertracks(yield_label=True):
-                # unknown speaker (=) label < 0
-                if not (isinstance(label, Number) and label < 0):
-                    hypothesis[segment, track] = label
-            return hypothesis
-
+            self.remove_unknown(speech_turns)
         return speech_turns
 
-    def get_metric(self) -> IdentificationErrorRate:
-        """Return new instance of identification error rate metric"""
-        # HACK: set miss, false_alarm to 0.1 because empty annotation gets confusion = 0.0
-        # -> pipeline optimizes to get only unknown speakers (=) empty annotation
-        miss, false_alarm = (0.1, 0.1) if self.confusion else (1., 1.)
-
-        return IdentificationErrorRate(confusion=1., miss=miss, false_alarm=false_alarm,
-                                       collar=0.0, skip_overlap=False)
-
-
-class SpeakerIdentificationKNN(SpeakerIdentification):
+class KNearestSpeakers(SupervisedSpeakerIdentification):
     """Speaker identification pipeline using k-nearest neighbors
 
     Parameters
@@ -372,11 +468,5 @@ class SpeakerIdentificationKNN(SpeakerIdentification):
 
         if self.confusion:
             #remove unknown speakers from hypothesis
-            hypothesis = speech_turns.empty()
-            for segment, track, label in speech_turns.itertracks(yield_label=True):
-                # unknown speaker (=) label < 0
-                if not (isinstance(label, Number) and label < 0):
-                    hypothesis[segment, track] = label
-            return hypothesis
-
+            self.remove_unknown(speech_turns)
         return speech_turns
