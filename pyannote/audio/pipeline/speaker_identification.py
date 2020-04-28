@@ -168,18 +168,14 @@ class SupervisedSpeakerIdentification(Pipeline):
             speech_turns = speech_turns.crop(annotated, mode="intersection")
 
         if self.confusion:
-            #remove unknown speakers from hypothesis
+            # remove unknown speakers from hypothesis
             speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
 
     def remove_unknown(self, hypothesis):
-        result = hypothesis.empty()
-        for segment, track, label in hypothesis.itertracks(yield_label=True):
-            # unknown speaker (=) label < 0
-            if not(isinstance(label, Number) and label < 0):
-                result[segment, track] = label
-
-        return result
+        unknown_labels = [label for label in hypothesis.labels()
+                          if isinstance(label, Number) and label < 0]
+        return hypothesis.subset(unknown_labels, invert=True)
 
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of identification error rate metric"""
@@ -290,7 +286,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
             #average embeddings per reference
             X_targets.append(np.mean(embeddings, axis=0))
 
-        #gather inference embeddings
+        # gather inference embeddings
         embedding = self._embedding(current_file)
 
         # gather speech turns embedding
@@ -314,7 +310,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
 
             assigned_labels.append(label)
 
-            #average speech turn embeddings
+            # average speech turn embeddings
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to closest class
@@ -377,6 +373,9 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
     confusion : `bool`, optional
         Evaluate only confusion -> remove unknown speakers from hypothesis
         Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
+    weigh : `bool`, optional
+        Weigh speakers inversely proportional to their number of appearances in references
+        Defaults to no weighing (i.e. False)
     """
 
     def __init__(
@@ -389,14 +388,18 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        confusion = False
+        confusion = False,
+        weigh = False
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
                          embedding, metric, evaluation_only, confusion)
         self.classifier = KNN(self.metric)
+        self.weigh = weigh
 
-    def __call__(self, current_file: dict, use_threshold: bool = True) -> Annotation:
+    def __call__(self, current_file: dict, use_threshold: bool = True,
+                 must_link: Annotation = Annotation(),
+                 cannot_link: Annotation = Annotation()) -> Annotation:
         """Apply speaker identification
 
         Parameters
@@ -404,10 +407,15 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         current_file : `dict`
             File as provided by a pyannote.database protocol.
         use_threshold : `bool`, optional
-            Ignores `closest_assignment.threshold` if False
+            Ignores `classifier.threshold` if False
             -> sample embeddings are assigned to the closest target no matter the distance
             Defaults to True.
-
+        must_link : `Annotation`, optional
+            Annotation to constrain identification
+            Defaults to no constraints (i.e. empty annotation)
+        cannot_link : `Annotation`, optional
+            Annotation to constrain identification
+            Defaults to no constraints (i.e. empty annotation)
         Returns
         -------
         hypothesis : `pyannote.core.Annotation`
@@ -427,25 +435,24 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
             speech_turns = speech_turns.crop(annotated, mode="intersection")
 
         # gather targets embedding
+        weights = {}
         X_targets, targets_labels = [], []
         for label, embeddings in self.references.items():
+            weights[label] = 1/len(embeddings) if self.weigh else 1
             targets_labels.extend([label for _ in embeddings])
             X_targets.extend(embeddings)
 
-        #gather inference embeddings
+        # gather inference embeddings
         embedding = self._embedding(current_file)
 
         # gather speech turns embedding
-        labels = speech_turns.labels()
-        X, assigned_labels, skipped_labels = [], [], []
-        for l, label in enumerate(labels):
-
-            timeline = speech_turns.label_timeline(label, copy=False)
-
+        # flatten must_link and cannot_link
+        X, assigned_labels, skipped_labels, ml, cl = [], [], [], [], []
+        for segment, track, label in speech_turns.itertracks(yield_label=True):
             # be more and more permissive until we have
             # at least one embedding for current speech turn
             for mode in ["strict", "center", "loose"]:
-                x = embedding.crop(timeline, mode=mode)
+                x = embedding.crop(segment, mode=mode)
                 if len(x) > 0:
                     break
 
@@ -455,19 +462,27 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
                 continue
 
             assigned_labels.append(label)
+            link_to = must_link.get_labels(segment)
+            # get the first element of the link_to set
+            link_to = next(iter(link_to)) if link_to else None
+            ml.append(link_to)
+            cl.append(list(cannot_link.get_labels(segment)))
 
-            #average speech turn embeddings
+            # average speech turn embeddings
             X.append(np.mean(x, axis=0))
 
         # assign speech turns to the nearest neighbor
         assignments = self.classifier(np.vstack(X_targets),
                                       np.vstack(X),
                                       targets_labels,
-                                      use_threshold = use_threshold)
+                                      use_threshold = use_threshold,
+                                      weights = weights,
+                                      must_link = ml,
+                                      cannot_link = cl)
         mapping = dict(zip(assigned_labels, assignments))
         speech_turns.rename_labels(mapping=mapping, copy = False)
 
         if self.confusion:
-            #remove unknown speakers from hypothesis
+            # remove unknown speakers from hypothesis
             speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
