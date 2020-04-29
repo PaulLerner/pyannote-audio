@@ -27,7 +27,7 @@
 # Hervé BREDIN - http://herve.niderb.fr
 
 import numpy as np
-from typing import Optional
+from typing import Optional, Text
 
 from pyannote.core import Annotation
 from pyannote.core import Timeline
@@ -179,8 +179,10 @@ class SpeechTurnClustering(Pipeline):
         hypothesis : `pyannote.core.Annotation`
             Clustering result.
         """
-
-        assert_string_labels(speech_turns, "speech_turns")
+        # allow `Number` labels to differentiate
+        # - identified speakers (`Text` label)
+        # - unknown speakers (`Number` label)
+        # assert_string_labels(speech_turns, "speech_turns")
 
         embedding = self._embedding(current_file)
 
@@ -219,12 +221,17 @@ class SpeechTurnClustering(Pipeline):
         clusters = self.clustering(np.vstack(X), cannot_link = cl)
 
         # map each clustered label to its cluster (between 1 and N_CLUSTERS)
-        mapping = {label: k for label, k in zip(clustered_labels, clusters)}
+        mapping, identities = {}, {}
+        for label, k in zip(clustered_labels, clusters):
+            mapping[label] = k
+            # keep original labels for identified speakers
+            if isinstance(label, Text):
+                identities[k] = label
 
         # map each skipped label to its own cluster
-        # (between -1 and -N_SKIPPED_LABELS)
+        # (between N_CLUSTERS+1 and N_CLUSTERS+N_SKIPPED_LABELS)
         for l, label in enumerate(skipped_labels):
-            mapping[label] = -(l + 1)
+            mapping[label] = len(clusters) + l + 1
 
         # do the actual mapping
         speech_turns.rename_labels(mapping=mapping, copy=False)
