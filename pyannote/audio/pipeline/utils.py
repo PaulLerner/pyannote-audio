@@ -25,14 +25,17 @@
 
 # AUTHORS
 # Hervé BREDIN - http://herve.niderb.fr
+# Paul LERNER
 
-
+import numpy as np
 import yaml
 from pathlib import Path
 from pyannote.core import Annotation
 from pyannote.pipeline import Pipeline
 from pyannote.core.utils.helper import get_class_by_name
-
+from pyannote.database import get_protocol
+from pyannote.audio.features.wrapper import Wrapper, Wrappable
+from pyannote.database import FileFinder
 
 def assert_string_labels(annotation: Annotation, name: str):
     """Check that annotation only contains string labels
@@ -63,6 +66,100 @@ def assert_int_labels(annotation: Annotation, name: str):
         msg = f"{name} must contain `int` labels only."
         raise ValueError(msg)
 
+def get_references(protocol: str,
+                   model: Wrappable = "@emb",
+                   subsets: set = {'train'},
+                   label_min_duration: float = 0.0):
+    """Gets references from protocol
+    Parameters
+    ----------
+    protocol: str
+    model: Wrappable, optional
+        Describes how raw speaker embeddings should be obtained.
+        See pyannote.audio.features.wrapper.Wrapper documentation for details.
+        Defaults to "@emb" that indicates that protocol files provide
+        the scores in the "emb" key.
+    subsets: set, optional
+        which protocol subset to get reference from.
+        Defaults to {'train'}
+    label_min_duration: float or int, optional
+        Only keep speaker with at least `label_min_duration` of annotated data.
+        Defaults to keep every speaker (i.e. 0.0)
+
+    Returns
+    -------
+    references : dict
+        a dict like {identity : embeddings}
+        with embeddings being a list of embeddings
+    """
+    references, durations = {}, {}
+    preprocessors = {'audio': FileFinder()}
+    protocol = get_protocol(protocol, preprocessors=preprocessors)
+    model = Wrapper(model)
+    for subset in subsets:
+        for current_file in getattr(protocol, subset)():
+            embedding = model(current_file)
+            annotation = current_file['annotation']
+            labels = annotation.labels()
+            for l, label in enumerate(labels):
+                timeline = annotation.label_timeline(label, copy=False)
+
+                # be more and more permissive until we have
+                # at least one embedding for current label
+                for mode in ['strict', 'center', 'loose']:
+                    x = embedding.crop(timeline, mode=mode)
+                    if len(x) > 0:
+                        break
+
+                # skip labels so small we don't have any embedding for it
+                if len(x) < 1:
+                    continue
+
+                #average label embeddings
+                x = np.mean(x, axis=0)
+
+                #append reference to the references
+                references.setdefault(label,[])
+                references[label].append(x)
+
+                #keep track of label duration
+                durations.setdefault(label,0.)
+                durations[label]+=timeline.duration()
+
+    #filter out labels based on label_min_duration
+    references = {speaker:embeddings for speaker,embeddings in references.items()
+                                     if durations[speaker] > label_min_duration}
+    return references
+
+def update_references(current_file: dict,
+                      annotation: Annotation,
+                      model: Wrappable = "@emb",
+                      references = {}):
+    """Updates references from annotation"""
+    model = Wrapper(model)
+    embedding = model(current_file)
+    labels = annotation.labels()
+    for l, label in enumerate(labels):
+        timeline = annotation.label_timeline(label, copy=False)
+
+        # be more and more permissive until we have
+        # at least one embedding for current label
+        for mode in ['strict', 'center', 'loose']:
+            x = embedding.crop(timeline, mode=mode)
+            if len(x) > 0:
+                break
+
+        # skip labels so small we don't have any embedding for it
+        if len(x) < 1:
+            continue
+
+        #average label embeddings
+        x = np.mean(x, axis=0)
+
+        #append reference to the references
+        references.setdefault(label,[])
+        references[label].append(x)
+    return references
 
 def load_pretrained_pipeline(train_dir: Path) -> Pipeline:
     """Load pretrained pipeline
