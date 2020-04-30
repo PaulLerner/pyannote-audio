@@ -160,7 +160,7 @@ class SpeechTurnClustering(Pipeline):
         return one_hot_decoding(y, window)
 
     def _turn_level(self, current_file: dict, speech_turns: Annotation,
-                    cannot_link: Optional[dict] = None) -> Annotation:
+                    cannot_link: Optional[dict] = {}) -> Annotation:
         """Apply clustering at speech turn level
 
         Parameters
@@ -172,7 +172,7 @@ class SpeechTurnClustering(Pipeline):
         cannot_link : `dict`, optional
             Clustering constraints, a dict like:
             {Segment : List[Segment]}, where segments should not be clustered together
-            Defaults to no constraints (i.e. None)
+            Defaults to no constraints (i.e. empty dict)
 
         Returns
         -------
@@ -241,7 +241,7 @@ class SpeechTurnClustering(Pipeline):
 
     def __call__(
         self, current_file: dict, speech_turns: Optional[Annotation] = None,
-        cannot_link: Optional[dict] = None
+        cannot_link: Optional[dict] = {}
     ) -> Annotation:
         """Apply speech turn clustering
 
@@ -256,7 +256,7 @@ class SpeechTurnClustering(Pipeline):
             Clustering constraints, a dict like:
             {Segment : Set[Segment]}, where segments should not be clustered together.
             Only implemented for turn-level clustering, will raise an error if self.window_wise
-            Defaults to no constraints (i.e. None)
+            Defaults to no constraints (i.e. empty dict)
         Returns
         -------
         speech_turns : `pyannote.core.Annotation`
@@ -267,8 +267,8 @@ class SpeechTurnClustering(Pipeline):
             speech_turns = current_file["speech_turns"]
 
         if not self.window_wise:
-            self._turn_level(current_file, speech_turns, cannot_link=cannot_link)
-        elif cannot_link is not None:
+            return self._turn_level(current_file, speech_turns, cannot_link=cannot_link)
+        elif cannot_link:
             msg = 'cannot_link constraints are not implemented for window-level clustering'
             raise NotImplementedError(msg)
 
