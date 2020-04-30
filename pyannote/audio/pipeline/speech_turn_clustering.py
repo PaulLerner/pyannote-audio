@@ -254,7 +254,7 @@ class SpeechTurnClustering(Pipeline):
             Defaults to `current_file['speech_turns']`.
         cannot_link : `dict`, optional
             Clustering constraints, a dict like:
-            {Segment : List[Segment]}, where segments should not be clustered together.
+            {Segment : Set[Segment]}, where segments should not be clustered together.
             Only implemented for turn-level clustering, will raise an error if self.window_wise
             Defaults to no constraints (i.e. None)
         Returns
