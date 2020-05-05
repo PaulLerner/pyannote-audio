@@ -42,6 +42,7 @@ from pyannote.metrics.diarization import DiarizationPurityCoverageFMeasure
 
 from .speech_turn_segmentation import SpeechTurnSegmentation
 from .speech_turn_segmentation import OracleSpeechTurnSegmentation
+from .speaker_diarization import SpeakerDiarization
 
 from pyannote.pipeline.blocks.classification import ClosestAssignment, KNN
 
@@ -94,6 +95,9 @@ class SupervisedSpeakerIdentification(Pipeline):
     purity : `float`, optional
         Optimize coverage for target purity.
         Defaults to optimizing identification error rate.
+    method : `str`, optional
+        Clustering method (see SpeechTurnClustering).
+        Defaults to no clustering -> speech-turn level identification
     """
 
     def __init__(
@@ -106,7 +110,8 @@ class SupervisedSpeakerIdentification(Pipeline):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        purity = None
+        purity = None,
+        method = None
     ):
 
         super().__init__()
@@ -119,26 +124,39 @@ class SupervisedSpeakerIdentification(Pipeline):
             self.references = references
         self.sad_scores = sad_scores
         self.scd_scores = scd_scores
-        if self.scd_scores == "oracle":
-            if self.sad_scores == "oracle":
-                self.speech_turn_segmentation = OracleSpeechTurnSegmentation()
-            else:
-                msg = (
-                    f"Both sad_scores and scd_scores should be set to 'oracle' "
-                    f"for oracle speech turn segmentation, "
-                    f"got {self.sad_scores} and {self.scd_scores}, respectively."
-                )
-                raise ValueError(msg)
-        else:
-            self.speech_turn_segmentation = SpeechTurnSegmentation(
-                sad_scores=self.sad_scores, scd_scores=self.scd_scores
-            )
         self.evaluation_only = evaluation_only
         self.purity = purity
 
         self.embedding = embedding
         self._embedding = Wrapper(self.embedding)
         self.metric = metric
+        self.method = method
+        if self.method is None:
+            # speech-turn level identification
+            if self.scd_scores == "oracle":
+                if self.sad_scores == "oracle":
+                    self.speech_turn_segmentation = OracleSpeechTurnSegmentation()
+                else:
+                    msg = (
+                        f"Both sad_scores and scd_scores should be set to 'oracle' "
+                        f"for oracle speech turn segmentation, "
+                        f"got {self.sad_scores} and {self.scd_scores}, respectively."
+                    )
+                    raise ValueError(msg)
+            else:
+                self.speech_turn_segmentation = SpeechTurnSegmentation(
+                    sad_scores=self.sad_scores, scd_scores=self.scd_scores
+                )
+        else:
+            # cluster level identification
+            self.speech_turn_segmentation = SpeakerDiarization(self.sad_scores,
+                                                               self.scd_scores,
+                                                               self.embedding,
+                                                               self.metric,
+                                                               self.method,
+                                                               self.evaluation_only,
+                                                               self.purity)
+
 
     def __call__(self, current_file: dict) -> Annotation:
         """Prototype function to apply speaker identification
@@ -256,6 +274,9 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
     purity : `float`, optional
         Optimize coverage for target purity.
         Defaults to optimizing identification error rate.
+    method : `str`, optional
+        Clustering method (see SpeechTurnClustering).
+        Defaults to no clustering -> speech-turn level identification
     """
 
     def __init__(
@@ -268,11 +289,12 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        purity = None
+        purity = None,
+        method=None
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
-                         embedding, metric, evaluation_only, purity)
+                         embedding, metric, evaluation_only, purity, method)
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
 
@@ -394,6 +416,9 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
     purity : `float`, optional
         Optimize coverage for target purity.
         Defaults to optimizing identification error rate.
+    method : `str`, optional
+        Clustering method (see SpeechTurnClustering).
+        Defaults to no clustering -> speech-turn level identification
     weigh : `bool`, optional
         Weigh speakers inversely proportional to their number of appearances in references
         Defaults to no weighing (i.e. False)
@@ -410,11 +435,12 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
         purity = None,
+        method = None,
         weigh = False
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
-                         embedding, metric, evaluation_only, purity)
+                         embedding, metric, evaluation_only, purity, method)
         self.classifier = KNN(self.metric)
         self.weigh = weigh
 
