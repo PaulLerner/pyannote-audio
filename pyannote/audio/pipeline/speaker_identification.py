@@ -38,6 +38,7 @@ from pyannote.core import Annotation
 from pyannote.database import get_annotated
 
 from pyannote.metrics.identification import IdentificationErrorRate
+from pyannote.metrics.diarization import DiarizationPurityCoverageFMeasure
 
 from .speech_turn_segmentation import SpeechTurnSegmentation
 from .speech_turn_segmentation import OracleSpeechTurnSegmentation
@@ -90,9 +91,9 @@ class SupervisedSpeakerIdentification(Pipeline):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`, optional
         Only process the evaluated regions. Default to False.
-    confusion : `bool`, optional
-        Evaluate only confusion -> remove unknown speakers from hypothesis
-        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
+    purity : `float`, optional
+        Optimize coverage for target purity.
+        Defaults to optimizing identification error rate.
     """
 
     def __init__(
@@ -105,7 +106,7 @@ class SupervisedSpeakerIdentification(Pipeline):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        confusion = False
+        purity = None
     ):
 
         super().__init__()
@@ -133,7 +134,7 @@ class SupervisedSpeakerIdentification(Pipeline):
                 sad_scores=self.sad_scores, scd_scores=self.scd_scores
             )
         self.evaluation_only = evaluation_only
-        self.confusion = confusion
+        self.purity = purity
 
         self.embedding = embedding
         self._embedding = Wrapper(self.embedding)
@@ -141,7 +142,7 @@ class SupervisedSpeakerIdentification(Pipeline):
 
     def __call__(self, current_file: dict) -> Annotation:
         """Prototype function to apply speaker identification
-        Notably shows usage of evaluation_only and confusion
+        Notably shows usage of evaluation_only
 
         Parameters
         ----------
@@ -159,17 +160,13 @@ class SupervisedSpeakerIdentification(Pipeline):
         speech_turns = self.speech_turn_segmentation(current_file)
 
         # some files are only partially annotated and therefore one cannot
-        # evaluate speaker diarization results on the whole file.
+        # evaluate speaker identification results on the whole file.
         # this option simply avoids trying to cluster those
-        # (potentially messy) un-annotated refions by focusing only on
+        # (potentially messy) un-annotated regions by focusing only on
         # speech turns contained in the annotated regions.
         if self.evaluation_only:
             annotated = get_annotated(current_file)
             speech_turns = speech_turns.crop(annotated, mode="intersection")
-
-        if self.confusion:
-            # remove unknown speakers from hypothesis
-            speech_turns = self.remove_unknown(speech_turns)
         return speech_turns
 
     def remove_unknown(self, hypothesis):
@@ -177,14 +174,43 @@ class SupervisedSpeakerIdentification(Pipeline):
                           if isinstance(label, Number) and label < 0]
         return hypothesis.subset(unknown_labels, invert=True)
 
+    def loss(self, current_file: dict, hypothesis: Annotation) -> float:
+        """Compute (1 - coverage) at target purity
+
+        If purity < target, return 1 + (1 - purity)
+
+        Parameters
+        ----------
+        current_file : `dict`
+            File as provided by a pyannote.database protocol.
+        hypothesis : `pyannote.core.Annotation`
+            Speech turns.
+
+        Returns
+        -------
+        loss : `float`
+            1. - cluster coverage.
+        """
+
+        metric = DiarizationPurityCoverageFMeasure()
+        reference = current_file["annotation"]
+        uem = get_annotated(current_file)
+        f_measure = metric(reference, hypothesis, uem=uem)
+        purity, coverage, _ = metric.compute_metrics()
+        if purity > self.purity:
+            return 1.0 - coverage
+        else:
+            return 1.0 + (1.0 - purity)
+
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of identification error rate metric"""
-        # HACK: set miss, false_alarm to 0.1 because empty annotation gets confusion = 0.0
-        # -> pipeline optimizes to get only unknown speakers (=) empty annotation
-        miss, false_alarm = (0.1, 0.1) if self.confusion else (1., 1.)
 
-        return IdentificationErrorRate(confusion=1., miss=miss, false_alarm=false_alarm,
-                                       collar=0.0, skip_overlap=False)
+        # defaults to optimizing identification error rate
+        if self.purity is None:
+            return IdentificationErrorRate(collar=0.0, skip_overlap=False)
+
+        # fallbacks to using self.loss(...)
+        raise NotImplementedError()
 
 class ClosestSpeaker(SupervisedSpeakerIdentification):
     """Speaker identification pipeline
@@ -227,9 +253,9 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`, optional
         Only process the evaluated regions. Default to False.
-    confusion : `bool`, optional
-        Evaluate only confusion -> remove unknown speakers from hypothesis
-        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
+    purity : `float`, optional
+        Optimize coverage for target purity.
+        Defaults to optimizing identification error rate.
     """
 
     def __init__(
@@ -242,11 +268,11 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        confusion = False
+        purity = None
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
-                         embedding, metric, evaluation_only, confusion)
+                         embedding, metric, evaluation_only, purity)
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
 
@@ -271,9 +297,9 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         speech_turns = self.speech_turn_segmentation(current_file)
 
         # some files are only partially annotated and therefore one cannot
-        # evaluate speaker diarization results on the whole file.
+        # evaluate speaker identification results on the whole file.
         # this option simply avoids trying to cluster those
-        # (potentially messy) un-annotated refions by focusing only on
+        # (potentially messy) un-annotated regions by focusing only on
         # speech turns contained in the annotated regions.
         if self.evaluation_only:
             annotated = get_annotated(current_file)
@@ -322,12 +348,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
             if not k < 0 else k
             for label, k in zip(assigned_labels, assignments)
         }
-        speech_turns.rename_labels(mapping=mapping, copy = False)
-
-        if self.confusion:
-            #remove unknown speakers from hypothesis
-            speech_turns = self.remove_unknown(speech_turns)
-        return speech_turns
+        return speech_turns.rename_labels(mapping=mapping)
 
 class KNearestSpeakers(SupervisedSpeakerIdentification):
     """Speaker identification pipeline using k-nearest neighbors
@@ -370,9 +391,9 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         Metric used for comparing embeddings. Defaults to 'cosine'.
     evaluation_only : `bool`, optional
         Only process the evaluated regions. Default to False.
-    confusion : `bool`, optional
-        Evaluate only confusion -> remove unknown speakers from hypothesis
-        Defaults to False (i.e. evaluate with ier = confusion + false_alarm + miss)
+    purity : `float`, optional
+        Optimize coverage for target purity.
+        Defaults to optimizing identification error rate.
     weigh : `bool`, optional
         Weigh speakers inversely proportional to their number of appearances in references
         Defaults to no weighing (i.e. False)
@@ -388,12 +409,12 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         embedding: Union[Text, Path] = None,
         metric: Optional[str] = "cosine",
         evaluation_only: Optional[bool] = False,
-        confusion = False,
+        purity = None,
         weigh = False
     ):
 
         super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
-                         embedding, metric, evaluation_only, confusion)
+                         embedding, metric, evaluation_only, purity)
         self.classifier = KNN(self.metric)
         self.weigh = weigh
 
@@ -426,9 +447,9 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         speech_turns = self.speech_turn_segmentation(current_file)
 
         # some files are only partially annotated and therefore one cannot
-        # evaluate speaker diarization results on the whole file.
+        # evaluate speaker identification results on the whole file.
         # this option simply avoids trying to cluster those
-        # (potentially messy) un-annotated refions by focusing only on
+        # (potentially messy) un-annotated regions by focusing only on
         # speech turns contained in the annotated regions.
         if self.evaluation_only:
             annotated = get_annotated(current_file)
@@ -480,9 +501,5 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
                                       must_link = ml,
                                       cannot_link = cl)
         mapping = dict(zip(assigned_labels, assignments))
-        speech_turns.rename_labels(mapping=mapping, copy = False)
 
-        if self.confusion:
-            # remove unknown speakers from hypothesis
-            speech_turns = self.remove_unknown(speech_turns)
-        return speech_turns
+        return speech_turns.rename_labels(mapping=mapping)
