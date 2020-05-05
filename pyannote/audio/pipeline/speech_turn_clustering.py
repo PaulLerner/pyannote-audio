@@ -28,6 +28,7 @@
 
 import numpy as np
 from typing import Optional, Text
+from warnings import warn
 
 from pyannote.core import Annotation
 from pyannote.core import Timeline
@@ -171,7 +172,7 @@ class SpeechTurnClustering(Pipeline):
             Speech turns.
         cannot_link : `dict`, optional
             Clustering constraints, a dict like:
-            {Segment : List[Segment]}, where segments should not be clustered together
+            {Segment : Set[Segment]}, where segments should not be clustered together
             Defaults to no constraints (i.e. empty dict)
 
         Returns
@@ -215,6 +216,9 @@ class SpeechTurnClustering(Pipeline):
         cl = []
         for segment, segments in cannot_link.items():
             for cl_to in segments:
+                if indices[segment] == indices[cl_to]:
+                    warn('cannot add cannot-link constraint to self, ignoring it. ')
+                    continue
                 cl.append((indices[segment], indices[cl_to]))
 
         # apply clustering of label embeddings
