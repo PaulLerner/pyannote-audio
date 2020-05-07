@@ -36,7 +36,7 @@ from .speech_turn_segmentation import SpeechTurnSegmentation
 from .speech_turn_segmentation import OracleSpeechTurnSegmentation
 from .speaker_diarization import SpeakerDiarization
 from .ASR import OracleASR, OracleNormalizer
-from .named_identification import LateFusion
+from .named_identification import NaiveMapping
 
 try:
     from .resegmentation import Resegmentation
