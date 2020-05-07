@@ -3,7 +3,7 @@
 
 # The MIT License (MIT)
 
-# Copyright (c) 2017-2019 CNRS
+# Copyright (c) 2017-2020 CNRS
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,8 @@ from .overlap_detection import OverlapDetection
 from .speech_turn_segmentation import SpeechTurnSegmentation
 from .speech_turn_segmentation import OracleSpeechTurnSegmentation
 from .speaker_diarization import SpeakerDiarization
+from .ASR import OracleASR, OracleNormalizer
+from .named_identification import LateFusion
 
 try:
     from .resegmentation import Resegmentation
