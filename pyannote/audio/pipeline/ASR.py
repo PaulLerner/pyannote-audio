@@ -66,8 +66,6 @@ def parse_aligned(annotations, uri):
         _, _, start, end, text, confidence = line.split()
         start, end, confidence = map(float, (start, end, confidence))
         segment = Segment(start, end)
-        # if text == "…":
-        #     text = "..."
         annotation.append((segment, text, confidence))
 
     return annotation
