@@ -37,7 +37,7 @@ from pyannote.database import get_annotated
 
 from .speaker_identification import SpeakerIdentification
 from .speaker_diarization import SpeakerDiarization
-from .ASR import OracleNormalizer as NormalizedASR, PLAIN, NORMALIZED
+from .ASR import OracleASR, OracleNormalizer, PLAIN, NORMALIZED
 
 class LateFusion(SpeakerIdentification):
     """Base class for late fusion for named speaker identification
@@ -101,7 +101,7 @@ class LateFusion(SpeakerIdentification):
                                               method,
                                               evaluation_only,
                                               purity)
-        self.ASR = NormalizedASR()
+        self.ASR = OracleNormalizer()
 
     def keep_normalized(self, annotation):
         """return annotation with only normalized names"""
@@ -114,67 +114,8 @@ class LateFusion(SpeakerIdentification):
 
 class NaiveMapping(LateFusion):
     """Naive Mapping for named speaker identification
-
-    Fuses :
-    - diarization pipeline
-    - normalized ASR pipeline
-
-    Parameters
-    ----------
-    sad_scores : Text or Path or 'oracle', optional
-        Describes how raw speech activity detection scores
-        should be obtained. It can be either the name of a torch.hub model, or
-        the path to the output of the validation step of a model trained
-        locally, or the path to scores precomputed on disk.
-        Defaults to "@sad_scores", indicating that protocol
-        files provide the scores in the corresponding "sad_scores" key.
-        Use 'oracle' to assume perfect speech activity detection.
-    scd_scores : Text or Path or 'oracle', optional
-        Describes how raw speaker change detection scores
-        should be obtained. It can be either the name of a torch.hub model, or
-        the path to the output of the validation step of a model trained
-        locally, or the path to scores precomputed on disk.
-        Defaults to "@scd_scores", indicating that protocol
-        files provide the scores in the corresponding "scd_scores" key.
-        Use 'oracle' to assume perfect speech turn segmentation,
-        `sad_scores` should then be set to 'oracle' too.
-    embedding : Text or Path, optional
-        Describes how raw speaker embeddings should be obtained. It can be
-        either the name of a torch.hub model, or the path to the output of the
-        validation step of a model trained locally, or the path to embeddings
-        precomputed on disk. Defaults to "@emb" that indicates that protocol
-        files provide the embeddings in the "emb" key.
-    metric : {'euclidean', 'cosine', 'angular'}, optional
-        Metric used for comparing embeddings. Defaults to 'cosine'.
-    method : {'pool', 'affinity_propagation'}
-        Clustering method. Defaults to 'pool'.
-    evaluation_only : `bool`
-        Only process the evaluated regions. Default to False.
-    purity : `float`, optional
-        Optimize coverage for target purity.
-        Defaults to optimizing diarization error rate.
+    Assigns to each cluster the closest (in time) name mention
     """
-
-    def __init__(
-        self,
-        sad_scores: Union[Text, Path] = None,
-        scd_scores: Union[Text, Path] = None,
-        embedding: Union[Text, Path] = None,
-        metric: Optional[str] = "cosine",
-        method: Optional[str] = "pool",
-        evaluation_only: Optional[bool] = False,
-        purity: Optional[float] = None
-    ):
-
-        super().__init__()
-        self.diarization = SpeakerDiarization(sad_scores,
-                                              scd_scores,
-                                              embedding,
-                                              metric,
-                                              method,
-                                              evaluation_only,
-                                              purity)
-        self.ASR = NormalizedASR()
 
     def __call__(self, current_file: dict) -> Annotation:
         """Apply named speaker identification
