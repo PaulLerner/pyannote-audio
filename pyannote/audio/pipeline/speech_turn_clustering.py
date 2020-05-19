@@ -102,6 +102,9 @@ class SpeechTurnClustering(Pipeline):
 
         self.window_wise = window_wise
 
+        # active learning designed segments
+        self.segment1, self.segment2 = None, None
+
     def _window_level(self, current_file: dict, speech_regions: Timeline) -> Annotation:
         """Apply clustering at window level
 
@@ -190,12 +193,13 @@ class SpeechTurnClustering(Pipeline):
         labels = speech_turns.labels()
         X, clustered_labels, skipped_labels = [], [], []
         # map segments to their index in X
-        indices = {}
+        segment2i, i2segment = {}, {}
         for l, label in enumerate(labels):
 
             timeline = speech_turns.label_timeline(label, copy=False)
             for segment in timeline:
-                indices[segment] = l
+                segment2i[segment] = l
+            i2segment[l] = max(timeline, key=lambda s: s.duration)
 
             # be more and more permissive until we have
             # at least one embedding for current speech turn
@@ -212,17 +216,20 @@ class SpeechTurnClustering(Pipeline):
             clustered_labels.append(label)
             X.append(np.mean(x, axis=0))
 
-        # convert cannot_link dict to list using indices
+        # convert cannot_link dict to list using segment2i
         cl = []
         for segment, segments in cannot_link.items():
             for cl_to in segments:
-                if indices[segment] == indices[cl_to]:
+                if segment2i[segment] == segment2i[cl_to]:
                     warn('cannot add cannot-link constraint to self, ignoring it. ')
                     continue
-                cl.append((indices[segment], indices[cl_to]))
+                cl.append((segment2i[segment], segment2i[cl_to]))
 
         # apply clustering of label embeddings
-        clusters = self.clustering(np.vstack(X), cannot_link = cl)
+        clusters, (i, j) = self.clustering(np.vstack(X), cannot_link=cl)
+
+        # embedding index to segment
+        self.segment1, self.segment2 = i2segment.get(i), i2segment.get(j)
 
         # map each clustered label to its cluster (between 1 and N_CLUSTERS)
         mapping, identities = {}, {}
