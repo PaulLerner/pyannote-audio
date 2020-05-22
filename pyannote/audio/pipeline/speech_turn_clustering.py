@@ -164,7 +164,7 @@ class SpeechTurnClustering(Pipeline):
         return one_hot_decoding(y, window)
 
     def _turn_level(self, current_file: dict, speech_turns: Annotation,
-                    cannot_link: Optional[dict] = {}) -> Annotation:
+                    cannot_link: Optional[dict] = {}, must_link: Optional[dict] = {}) -> Annotation:
         """Apply clustering at speech turn level
 
         Parameters
@@ -173,9 +173,9 @@ class SpeechTurnClustering(Pipeline):
             File as provided by a pyannote.database protocol.
         speech_turns : `Annotation`
             Speech turns.
-        cannot_link : `dict`, optional
+        cannot_link, must_link : `dict`, optional
             Clustering constraints, a dict like:
-            {Segment : Set[Segment]}, where segments should not be clustered together
+            {Segment : Set[Segment]}, where segments should not be (resp. should be) clustered together.
             Defaults to no constraints (i.e. empty dict)
 
         Returns
@@ -216,17 +216,12 @@ class SpeechTurnClustering(Pipeline):
             clustered_labels.append(label)
             X.append(np.mean(x, axis=0))
 
-        # convert cannot_link dict to list using segment2i
-        cl = []
-        for segment, segments in cannot_link.items():
-            for cl_to in segments:
-                if segment2i[segment] == segment2i[cl_to]:
-                    warn('cannot add cannot-link constraint to self, ignoring it. ')
-                    continue
-                cl.append((segment2i[segment], segment2i[cl_to]))
+        # convert clustering constraints dicts to list using segment2i
+        cl = flatten_constraints(cannot_link, segment2i)
+        ml = flatten_constraints(must_link, segment2i)
 
         # apply clustering of label embeddings
-        clusters, (i, j) = self.clustering(np.vstack(X), cannot_link=cl)
+        clusters, (i, j) = self.clustering(np.vstack(X), cannot_link=cl, must_link=ml)
 
         # embedding index to segment
         self.segment1, self.segment2 = i2segment.get(i), i2segment.get(j)
@@ -252,7 +247,7 @@ class SpeechTurnClustering(Pipeline):
 
     def __call__(
         self, current_file: dict, speech_turns: Optional[Annotation] = None,
-        cannot_link: Optional[dict] = {}
+        cannot_link: Optional[dict] = {}, must_link: Optional[dict] = {}
     ) -> Annotation:
         """Apply speech turn clustering
 
@@ -263,9 +258,9 @@ class SpeechTurnClustering(Pipeline):
         speech_turns : `Annotation`, optional
             Speech turns. Should only contain `str` labels.
             Defaults to `current_file['speech_turns']`.
-        cannot_link : `dict`, optional
+        cannot_link, must_link : `dict`, optional
             Clustering constraints, a dict like:
-            {Segment : Set[Segment]}, where segments should not be clustered together.
+            {Segment : Set[Segment]}, where segments should not be (resp. should be) clustered together.
             Only implemented for turn-level clustering, will raise an error if self.window_wise
             Defaults to no constraints (i.e. empty dict)
         Returns
@@ -278,9 +273,21 @@ class SpeechTurnClustering(Pipeline):
             speech_turns = current_file["speech_turns"]
 
         if not self.window_wise:
-            return self._turn_level(current_file, speech_turns, cannot_link=cannot_link)
-        elif cannot_link:
-            msg = 'cannot_link constraints are not implemented for window-level clustering'
+            return self._turn_level(current_file, speech_turns,
+                                    cannot_link=cannot_link, must_link=must_link)
+        elif cannot_link or must_link:
+            msg = 'Clustering constraints are not implemented for window-level clustering'
             raise NotImplementedError(msg)
 
         return self._window_level(current_file, speech_turns.get_timeline().support())
+
+def flatten_constraints(constraints, indices):
+
+    flat = []
+    for segment, segments in constraints.items():
+        for constraint in segments:
+            if indices[segment] == indices[constraint]:
+                warn('Cannot add constraint to self, ignoring it.')
+                continue
+            flat.append(tuple(sorted([indices[segment], indices[constraint]])))
+    return flat
