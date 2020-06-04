@@ -85,8 +85,8 @@ class OracleNormalizer(Pipeline):
         uri = current_file['uri']
         annotation = Annotation(uri, modality='text')
 
-        transcription = current_file['transcription']
-        for token in transcription:
+        entity = current_file['entity']
+        for token in entity:
             if token._.alignment_confidence < self.confidence:
                 continue
             segment = Segment(token._.time_start, token._.time_end)
