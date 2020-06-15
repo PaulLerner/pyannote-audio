@@ -49,6 +49,7 @@ from pyannote.pipeline import Pipeline
 from pyannote.audio.features.wrapper import Wrapper
 from .utils import get_references
 
+
 class SupervisedSpeakerIdentification(Pipeline):
     """Base class for Supervised Speaker identification pipelines
 
@@ -95,16 +96,16 @@ class SupervisedSpeakerIdentification(Pipeline):
     """
 
     def __init__(
-        self,
-        protocol : Text,
-        subsets : set = {'train'},
-        label_min_duration : Union[float, int] = 0.0,
-        sad_scores: Union[Text, Path] = None,
-        scd_scores: Union[Text, Path] = None,
-        embedding: Union[Text, Path] = None,
-        metric: Optional[str] = "cosine",
-        evaluation_only: Optional[bool] = False,
-        purity = None
+            self,
+            protocol: Text,
+            subsets: set = {'train'},
+            label_min_duration: Union[float, int] = 0.0,
+            sad_scores: Union[Text, Path] = None,
+            scd_scores: Union[Text, Path] = None,
+            embedding: Union[Text, Path] = None,
+            metric: Optional[str] = "cosine",
+            evaluation_only: Optional[bool] = False,
+            purity=None
     ):
 
         super().__init__()
@@ -207,6 +208,7 @@ class SupervisedSpeakerIdentification(Pipeline):
         # fallbacks to using self.loss(...)
         raise NotImplementedError()
 
+
 class ClosestSpeaker(SupervisedSpeakerIdentification):
     """Speaker identification pipeline
 
@@ -253,16 +255,16 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
     """
 
     def __init__(
-        self,
-        protocol : Text,
-        subsets : set = {'train'},
-        label_min_duration : Union[float, int] = 0.0,
-        sad_scores: Union[Text, Path] = None,
-        scd_scores: Union[Text, Path] = None,
-        embedding: Union[Text, Path] = None,
-        metric: Optional[str] = "cosine",
-        evaluation_only: Optional[bool] = False,
-        purity = None
+            self,
+            protocol: Text,
+            subsets: set = {'train'},
+            label_min_duration: Union[float, int] = 0.0,
+            sad_scores: Union[Text, Path] = None,
+            scd_scores: Union[Text, Path] = None,
+            embedding: Union[Text, Path] = None,
+            metric: Optional[str] = "cosine",
+            evaluation_only: Optional[bool] = False,
+            purity=None
     ):
 
         super().__init__(protocol, subsets, label_min_duration, sad_scores, scd_scores,
@@ -303,7 +305,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         X_targets, targets_labels = [], []
         for label, embeddings in self.references.items():
             targets_labels.append(label)
-            #average embeddings per reference
+            # average embeddings per reference
             X_targets.append(np.mean(embeddings, axis=0))
 
         # gather inference embeddings
@@ -336,13 +338,14 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         # assign speech turns to closest class
         assignments = self.closest_assignment(np.vstack(X_targets),
                                               np.vstack(X),
-                                              use_threshold = use_threshold)
+                                              use_threshold=use_threshold)
         mapping = {
             label: targets_labels[k]
             if not k < 0 else k
             for label, k in zip(assigned_labels, assignments)
         }
         return speech_turns.rename_labels(mapping=mapping)
+
 
 class KNearestSpeakers(SupervisedSpeakerIdentification):
     """Speaker identification pipeline using k-nearest neighbors
@@ -393,17 +396,17 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
     """
 
     def __init__(
-        self,
-        protocol : Text,
-        subsets : set = {'train'},
-        label_min_duration : Union[float, int] = 0.0,
-        sad_scores: Union[Text, Path] = None,
-        scd_scores: Union[Text, Path] = None,
-        embedding: Union[Text, Path] = None,
-        metric: Optional[str] = "cosine",
-        evaluation_only: Optional[bool] = False,
-        purity = None,
-        weigh = False
+            self,
+            protocol: Text,
+            subsets: set = {'train'},
+            label_min_duration: Union[float, int] = 0.0,
+            sad_scores: Union[Text, Path] = None,
+            scd_scores: Union[Text, Path] = None,
+            embedding: Union[Text, Path] = None,
+            metric: Optional[str] = "cosine",
+            evaluation_only: Optional[bool] = False,
+            purity=None,
+            weigh=False
     ):
 
         super().__init__(protocol, subsets, label_min_duration, sad_scores, scd_scores,
@@ -452,7 +455,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         weights = {}
         X_targets, targets_labels = [], []
         for label, embeddings in self.references.items():
-            weights[label] = 1/len(embeddings) if self.weigh else 1
+            weights[label] = 1 / len(embeddings) if self.weigh else 1
             targets_labels.extend([label for _ in embeddings])
             X_targets.extend(embeddings)
 
@@ -489,10 +492,10 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         assignments = self.classifier(np.vstack(X_targets),
                                       np.vstack(X),
                                       targets_labels,
-                                      use_threshold = use_threshold,
-                                      weights = weights,
-                                      must_link = ml,
-                                      cannot_link = cl)
+                                      use_threshold=use_threshold,
+                                      weights=weights,
+                                      must_link=ml,
+                                      cannot_link=cl)
         mapping = dict(zip(assigned_labels, assignments))
 
         return speech_turns.rename_labels(mapping=mapping)
