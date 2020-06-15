@@ -66,7 +66,7 @@ We start by extracting raw scores/embeddings using the following pretrained mode
 * `emb_ami` for speaker embedding 
 
 ```bash
-$ export EXP_DIR=tutorials/pipelines/speech_activity_detection
+$ export EXP_DIR=tutorials/pipelines/speaker_diarization
 
 $ for SUBSET in developement test
  > do
@@ -95,6 +95,7 @@ pipeline:
     sad_scores: {{EXP_DIR}}/sad_ami
     scd_scores: {{EXP_DIR}}/scd_ami
     embedding: {{EXP_DIR}}/emb_ami
+    method: affinity_propagation
 
 # one can freeze some of the hyper-parameters
 # for instance, in this example, we are using
