@@ -46,8 +46,7 @@ from .speech_turn_segmentation import OracleSpeechTurnSegmentation
 from pyannote.pipeline.blocks.classification import ClosestAssignment, KNN
 
 from pyannote.pipeline import Pipeline
-from pyannote.pipeline.parameter import Uniform
-from pyannote.audio.features.wrapper import Wrapper, Wrappable
+from pyannote.audio.features.wrapper import Wrapper
 from .utils import get_references
 
 class SupervisedSpeakerIdentification(Pipeline):
@@ -55,9 +54,8 @@ class SupervisedSpeakerIdentification(Pipeline):
 
     Parameters
     ----------
-    references : dict or Text
-        Either a dict like {identity : features}
-        or the name of a pyannote protocol which should be loaded like this.
+    protocol : Text
+        Name of a pyannote protocol to get references from.
     subsets: set, optional
         which protocol subset to get reference from.
         Defaults to {'train'}
@@ -98,7 +96,7 @@ class SupervisedSpeakerIdentification(Pipeline):
 
     def __init__(
         self,
-        references : Union[dict, Text],
+        protocol : Text,
         subsets : set = {'train'},
         label_min_duration : Union[float, int] = 0.0,
         sad_scores: Union[Text, Path] = None,
@@ -110,13 +108,10 @@ class SupervisedSpeakerIdentification(Pipeline):
     ):
 
         super().__init__()
-        if isinstance(references, Text):
-            self.references = get_references(references,
-                                             embedding,
-                                             subsets,
-                                             label_min_duration)
-        else:
-            self.references = references
+        self.references = get_references(protocol,
+                                         embedding,
+                                         subsets,
+                                         label_min_duration)
         self.sad_scores = sad_scores
         self.scd_scores = scd_scores
         if self.scd_scores == "oracle":
@@ -217,9 +212,8 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
 
     Parameters
     ----------
-    references : dict or Text
-        Either a dict like {identity : features}
-        or the name of a pyannote protocol which should be loaded like this.
+    protocol : Text
+        Name of a pyannote protocol to get references from.
     subsets: set, optional
         which protocol subset to get reference from.
         Defaults to {'train'}
@@ -260,7 +254,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
 
     def __init__(
         self,
-        references : Union[dict, Text],
+        protocol : Text,
         subsets : set = {'train'},
         label_min_duration : Union[float, int] = 0.0,
         sad_scores: Union[Text, Path] = None,
@@ -271,7 +265,7 @@ class ClosestSpeaker(SupervisedSpeakerIdentification):
         purity = None
     ):
 
-        super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
+        super().__init__(protocol, subsets, label_min_duration, sad_scores, scd_scores,
                          embedding, metric, evaluation_only, purity)
 
         self.closest_assignment = ClosestAssignment(metric=self.metric)
@@ -355,9 +349,8 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
 
     Parameters
     ----------
-    references : dict or Text
-        Either a dict like {identity : features}
-        or the name of a pyannote protocol which should be loaded like this.
+    protocol : Text
+        Name of a pyannote protocol to get references from.
     subsets: set, optional
         which protocol subset to get reference from.
         Defaults to {'train'}
@@ -401,7 +394,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
 
     def __init__(
         self,
-        references : Union[dict, Text],
+        protocol : Text,
         subsets : set = {'train'},
         label_min_duration : Union[float, int] = 0.0,
         sad_scores: Union[Text, Path] = None,
@@ -413,7 +406,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         weigh = False
     ):
 
-        super().__init__(references, subsets, label_min_duration, sad_scores, scd_scores,
+        super().__init__(protocol, subsets, label_min_duration, sad_scores, scd_scores,
                          embedding, metric, evaluation_only, purity)
         self.classifier = KNN(self.metric)
         self.weigh = weigh
