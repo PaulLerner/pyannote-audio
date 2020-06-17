@@ -57,7 +57,7 @@ class OracleASR(Pipeline):
 
         transcription = current_file['transcription']
         for token in transcription:
-            if token._.alignment_confidence < self.confidence:
+            if token._.confidence < self.confidence:
                 continue
             segment = Segment(token._.time_start, token._.time_end)
             annotation[segment, PLAIN] = token.text
@@ -87,7 +87,7 @@ class OracleNormalizer(Pipeline):
 
         entity = current_file['entity']
         for token in entity:
-            if token._.alignment_confidence < self.confidence:
+            if token._.confidence < self.confidence:
                 continue
             segment = Segment(token._.time_start, token._.time_end)
             annotation[segment, PLAIN] = token.text
