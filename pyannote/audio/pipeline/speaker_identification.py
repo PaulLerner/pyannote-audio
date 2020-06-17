@@ -414,9 +414,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
         self.classifier = KNN(self.metric)
         self.weigh = weigh
 
-    def __call__(self, current_file: dict, use_threshold: bool = True,
-                 must_link: Annotation = Annotation(),
-                 cannot_link: Annotation = Annotation()) -> Annotation:
+    def __call__(self, current_file: dict, use_threshold: bool = True) -> Annotation:
         """Apply speaker identification
 
         Parameters
@@ -427,12 +425,6 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
             Ignores `classifier.threshold` if False
             -> sample embeddings are assigned to the closest target no matter the distance
             Defaults to True.
-        must_link : `Annotation`, optional
-            Annotation to constrain identification
-            Defaults to no constraints (i.e. empty annotation)
-        cannot_link : `Annotation`, optional
-            Annotation to constrain identification
-            Defaults to no constraints (i.e. empty annotation)
         Returns
         -------
         hypothesis : `pyannote.core.Annotation`
@@ -464,7 +456,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
 
         # gather speech turns embedding
         # flatten must_link and cannot_link
-        X, assigned_labels, skipped_labels, ml, cl = [], [], [], [], []
+        X, assigned_labels, skipped_labels = [], [], []
         for segment, track, label in speech_turns.itertracks(yield_label=True):
             # be more and more permissive until we have
             # at least one embedding for current speech turn
@@ -479,11 +471,6 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
                 continue
 
             assigned_labels.append(label)
-            link_to = must_link.get_labels(segment)
-            # get the first element of the link_to set
-            link_to = next(iter(link_to)) if link_to else None
-            ml.append(link_to)
-            cl.append(list(cannot_link.get_labels(segment)))
 
             # average speech turn embeddings
             X.append(np.mean(x, axis=0))
@@ -493,9 +480,7 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
                                       np.vstack(X),
                                       targets_labels,
                                       use_threshold=use_threshold,
-                                      weights=weights,
-                                      must_link=ml,
-                                      cannot_link=cl)
+                                      weights=weights)
         mapping = dict(zip(assigned_labels, assignments))
 
         return speech_turns.rename_labels(mapping=mapping)
