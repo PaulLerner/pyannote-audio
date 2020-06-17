@@ -412,6 +412,9 @@ class KNearestSpeakers(SupervisedSpeakerIdentification):
     purity : `float`, optional
         Optimize coverage for target purity.
         Defaults to optimizing identification error rate.
+    method : `str`, optional
+        Clustering method (see SpeechTurnClustering).
+        Defaults to no clustering -> speech-turn level identification
     weigh : `bool`, optional
         Weigh speakers inversely proportional to their number of appearances in references
         Defaults to no weighing (i.e. False)
