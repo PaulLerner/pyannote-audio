@@ -27,16 +27,14 @@
 # Paul LERNER
 
 from pyannote.core import Annotation, Segment
-
 from pyannote.pipeline import Pipeline
 from pyannote.pipeline.parameter import Uniform
-
+from Plumcot.loader import NA
 
 # track names to separate normalized names from plain text
 PLAIN = "plain"
 NORMALIZED = "normalized"
-# normalized names we don't want to consider as annotated
-NA = {'UNKNOWN', 'multiple_persons'}
+
 
 class OracleASR(Pipeline):
     """Timestamped transcriptions.
@@ -94,6 +92,7 @@ class OracleNormalizer(Pipeline):
             label = token.ent_kb_id_
             # keep only proper names
             if label != '' and token.pos_ == 'PROPN' and label not in NA:
+                
                 annotation[segment, NORMALIZED] = label
 
         return annotation
