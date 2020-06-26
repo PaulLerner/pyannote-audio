@@ -55,7 +55,7 @@ from pathlib import Path
 from pyannote.audio.utils.signal import Binarize
 
 from pyannote.audio.features import FeatureExtraction
-from pyannote.database.protocol.protocol import ProtocolFile
+from pyannote.database import ProtocolFile
 from pyannote.audio.train.model import Model
 from pyannote.audio.train.model import Resolution
 from pyannote.audio.train.model import Alignment
@@ -423,7 +423,7 @@ class Resegmentation(LabelingTask):
         # existing) mask so that the loss is not computed on non-speech regions
         if self.lock_speech:
 
-            encoded, _ = one_hot_encoding(
+            encoded = one_hot_encoding(
                 hypothesis,
                 get_annotated(current_file),
                 current_file["features"].sliding_window,

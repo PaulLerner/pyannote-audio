@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Text
 from typing import Union
 from typing import Dict
-
-from pyannote.database.protocol.protocol import ProtocolFile
+from functools import partial
+from pyannote.database import ProtocolFile
 from pyannote.core import Segment
 from pyannote.core import SlidingWindowFeature
 import numpy as np
@@ -40,6 +40,10 @@ import numpy as np
 Wrappable = Union[
     "Precomputed", "Pretrained", "RawAudio", "FeatureExtraction", Dict, Text, Path
 ]
+
+# this needs to go here to make Wrapper instances pickable
+def _use_existing_key(key, file):
+    return file[key]
 
 
 class Wrapper:
@@ -181,7 +185,9 @@ class Wrapper:
             # it means that one should read the "key" key of protocol files
             if wrappable.startswith("@"):
                 key = wrappable[1:]
-                scorer = lambda current_file: current_file[key]
+
+                scorer = partial(_use_existing_key, key)
+                # scorer = lambda current_file: current_file[key]
 
             # If `wrappable` is a `Text` containing the name of an existing
             # `torch.hub` model, wrap the corresponding `Pretrained`.
@@ -275,4 +281,17 @@ class Wrapper:
 
     # used to "inherit" most scorer_ attributes
     def __getattr__(self, name):
+
+        # prevents a "RecursionError: maximum recursion depth exceeded" when pickling Wrapper
+        # https://stackoverflow.com/questions/49380224/how-to-make-classes-with-getattr-pickable
+        if "scorer_" not in vars(self):
+            raise AttributeError
+
         return getattr(self.scorer_, name)
+
+    def __setattr__(self, name, value):
+        if name == "scorer_":
+            object.__setattr__(self, name, value)
+
+        else:
+            setattr(self.scorer_, name, value)

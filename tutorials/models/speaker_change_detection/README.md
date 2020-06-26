@@ -148,14 +148,14 @@ To get a quick idea of how the network is doing on the development set, one can 
 
 ```bash
 $ export TRN_DIR=${EXP_DIR}/train/AMI.SpeakerDiarization.MixHeadset.train
-$ pyannote-audio scd validate --subset=develop --from=200 --to=1000 --every=100 ${TRN_DIR} AMI.SpeakerDiarization.MixHeadset
+$ pyannote-audio scd validate --subset=development --from=200 --to=1000 --every=100 ${TRN_DIR} AMI.SpeakerDiarization.MixHeadset
 ```
 It can be run while the model is still training and evaluates the model every 100 epochs. This will create a bunch of files in `VAL_DIR` (defined below). 
 
 In practice, it is tuning a simple speaker change detection pipeline and stores the best hyper-parameter configuration on disk (i.e. the one that maximizes segmentation f-score):
 
 ```bash
-$ export VAL_DIR = ${TRN_DIR}/validate/AMI.SpeakerDiarization.MixHeadset.development
+$ export VAL_DIR = ${TRN_DIR}/validate_segmentation_fscore/AMI.SpeakerDiarization.MixHeadset.development
 $ cat ${VAL_DIR}/params.yml
 ```
 ```yaml

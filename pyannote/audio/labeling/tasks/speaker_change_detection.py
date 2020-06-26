@@ -37,9 +37,11 @@ from .base import LabelingTaskGenerator
 from pyannote.audio.train.task import Task, TaskType, TaskOutput
 import scipy.signal
 from pyannote.audio.features.wrapper import Wrappable
-from pyannote.database.protocol.protocol import Protocol
+from pyannote.database import Protocol
+from pyannote.database import Subset
 from pyannote.audio.train.model import Resolution
 from pyannote.audio.train.model import Alignment
+from pyannote.audio.train.model import RESOLUTION_FRAME
 
 
 class SpeakerChangeDetectionGenerator(LabelingTaskGenerator):
@@ -92,7 +94,7 @@ class SpeakerChangeDetectionGenerator(LabelingTaskGenerator):
         task: Task,
         feature_extraction: Wrappable,
         protocol: Protocol,
-        subset: Text = "train",
+        subset: Subset = "train",
         resolution: Optional[Resolution] = None,
         alignment: Optional[Alignment] = None,
         duration: float = 2.0,
@@ -109,9 +111,9 @@ class SpeakerChangeDetectionGenerator(LabelingTaskGenerator):
         self.non_speech = non_speech
 
         # number of samples in collar
-        if resolution is None:
+        if resolution in [None, RESOLUTION_FRAME]:
             resolution = feature_extraction.sliding_window
-        self.collar_ = resolution.durationToSamples(collar)
+        self.collar_ = resolution.duration_to_samples(collar)
 
         # window
         self.window_ = scipy.signal.triang(self.collar_)[:, np.newaxis]
@@ -245,7 +247,7 @@ class SpeakerChangeDetection(LabelingTask):
         self,
         feature_extraction,
         protocol,
-        subset="train",
+        subset: Subset = "train",
         resolution=None,
         alignment=None,
     ):
@@ -265,7 +267,7 @@ class SpeakerChangeDetection(LabelingTask):
             protocol,
             resolution=resolution,
             alignment=alignment,
-            subset="train",
+            subset=subset,
             collar=self.collar,
             regression=self.regression,
             non_speech=self.non_speech,
