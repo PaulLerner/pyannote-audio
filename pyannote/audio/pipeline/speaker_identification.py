@@ -27,8 +27,17 @@
 # Hervé BREDIN - http://herve.niderb.fr
 # Paul LERNER
 
+from pathlib import Path
+from typing import Union
+from typing import Text
+
+from collections import Counter
+
+from pyannote.core import Annotation
 from pyannote.metrics.identification import IdentificationErrorRate
 from pyannote.pipeline import Pipeline
+from pyannote.database.util import load_rttm
+from .speaker_diarization import SpeakerDiarization
 
 
 class SpeakerIdentification(Pipeline):
@@ -39,3 +48,67 @@ class SpeakerIdentification(Pipeline):
     def get_metric(self) -> IdentificationErrorRate:
         """Return new instance of diarization error rate metric"""
         return IdentificationErrorRate(collar=0.0, skip_overlap=False)
+
+
+class LateFusion(SpeakerIdentification):
+    """Base class for late-fusion speaker identification pipeline
+
+    Takes as input:
+    - Identification hypothesis
+    - Diarization hypothesis
+
+    and merges the two
+
+    Parameters
+    ----------
+    identification: Text or Path
+        Path towards the identification hypothesis in RTTM format
+    **kwargs: Additional parameters are passed to the diarization pipeline
+    """
+
+    def __init__(self, identification: Union[Text, Path], **kwargs):
+        super().__init__()
+        # load identification hypothesis from RTTM
+        self.identification = load_rttm(identification)
+
+        # init diarization pipeline
+        self.diarization = SpeakerDiarization(**kwargs)
+
+
+class MajorityVoting(LateFusion):
+    """Fuses identification and diarization hypotheses using majority voting
+    The identity of each cluster is the mode of the identification hypothesis
+
+    See LateFusion
+    """
+
+    def __call__(self, current_file: dict) -> Annotation:
+        """Apply majority voting to fuse speaker diarization and identification
+
+        Parameters
+        ----------
+        current_file : `dict`
+            File as provided by a pyannote.database protocol.
+
+        Returns
+        -------
+        hypothesis : `pyannote.core.Annotation`
+            Speaker identification output.
+        """
+        uri = current_file["uri"]
+        identification = self.identification[uri]
+        diarization = self.diarization(current_file)
+
+        # gather votes from identification
+        votes = {}
+        for segment, track, label in diarization.itertracks(yield_label=True):
+            votes.setdefault(label, Counter())
+            # there should be only one label per segment in identification
+            # this avoids handling tracks
+            id_label = identification.get_labels(segment, unique=False)[0]
+            votes[label][id_label] += 1
+        # keep only the majoritarian vote
+        mapping = {label: count.most_common(1)[0][0] for label, count in votes.items()}
+
+        # update diarization hypothesis with speaker id
+        return diarization.rename_labels(mapping=mapping)
