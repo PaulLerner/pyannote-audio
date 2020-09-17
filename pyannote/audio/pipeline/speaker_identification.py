@@ -32,6 +32,8 @@ from typing import Union
 from typing import Text
 
 from collections import Counter
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from pyannote.core import Annotation
 from pyannote.metrics.identification import IdentificationErrorRate
@@ -75,6 +77,26 @@ class LateFusion(SpeakerIdentification):
         self.diarization = SpeakerDiarization(**kwargs)
 
 
+def uniform_cooccurrence(annotation, other):
+    """Same as annotation*other but segment duration doesn't weigh in"""
+    # TODO: move to pyannote.core if appropriate
+    i_labels = annotation.labels()
+    j_labels = other.labels()
+
+    I = {label: i for i, label in enumerate(i_labels)}
+    J = {label: j for j, label in enumerate(j_labels)}
+
+    matrix = np.zeros((len(I), len(J)))
+
+    # iterate over intersecting tracks and accumulate co-occurrence
+    for (segment, track), (other_segment, other_track) in annotation.co_iter(other):
+        i = I[annotation[segment, track]]
+        j = J[other[other_segment, other_track]]
+        matrix[i, j] += 1
+
+    return matrix
+
+
 class MajorityVoting(LateFusion):
     """Fuses identification and diarization hypotheses using majority voting
     The identity of each cluster is the mode of the identification hypothesis
@@ -99,15 +121,15 @@ class MajorityVoting(LateFusion):
         identification = self.identification[uri]
         diarization = self.diarization(current_file)
 
-        # gather votes from identification
-        votes = {}
-        for (d_segment, d_track), (i_segment, i_track) in diarization.co_iter(identification):
-            d_label = diarization[d_segment, d_track]
-            i_label = identification[i_segment, i_track]
-            votes.setdefault(d_label, Counter())
-            votes[d_label][i_label] += 1
-        # keep only the majoritarian vote
-        mapping = {label: count.most_common(1)[0][0] for label, count in votes.items()}
+        # find one-to-one mapping that maximes co-occurence between
+        # diarization and identification using the Hungarian algorithm
+        mapping = {}
+        cooccurrence = uniform_cooccurrence(diarization, identification)
+        d_labels, i_labels = diarization.labels(), identification.labels()
+
+        for a, b in zip(*linear_sum_assignment(-cooccurrence)):
+            if cooccurrence[a, b] > 0:
+                mapping[d_labels[a]] = i_labels[b]
 
         # update diarization hypothesis with speaker id
         return diarization.rename_labels(mapping=mapping)
