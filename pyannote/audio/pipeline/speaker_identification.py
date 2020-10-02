@@ -38,7 +38,7 @@ from scipy.optimize import linear_sum_assignment
 from pyannote.core import Annotation
 from pyannote.metrics.identification import IdentificationErrorRate
 from pyannote.pipeline import Pipeline
-from pyannote.database.util import load_rttm
+from pyannote.database.util import load_id
 from .speaker_diarization import SpeakerDiarization
 
 
@@ -70,8 +70,8 @@ class LateFusion(SpeakerIdentification):
 
     def __init__(self, identification: Union[Text, Path], **kwargs):
         super().__init__()
-        # load identification hypothesis from RTTM
-        self.identification = load_rttm(identification)
+        # load identification hypothesis from id (RTTM-like)
+        self.identification = load_id(identification)
 
         # init diarization pipeline
         self.diarization = SpeakerDiarization(**kwargs)
