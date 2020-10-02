@@ -77,11 +77,12 @@ class LateFusion(SpeakerIdentification):
         self.diarization = SpeakerDiarization(**kwargs)
 
 
-def uniform_cooccurrence(annotation, other):
-    """Same as annotation*other but segment duration doesn't weigh in"""
+def confidence_cooccurrence(annotation, identification):
+    """Same as annotation*other but segment duration doesn't weigh in.
+    Instead, the co-occurence score comes from identification confidences scores (sadly stored as "track")"""
     # TODO: move to pyannote.core if appropriate
     i_labels = annotation.labels()
-    j_labels = other.labels()
+    j_labels = identification.labels()
 
     I = {label: i for i, label in enumerate(i_labels)}
     J = {label: j for j, label in enumerate(j_labels)}
@@ -89,10 +90,10 @@ def uniform_cooccurrence(annotation, other):
     matrix = np.zeros((len(I), len(J)))
 
     # iterate over intersecting tracks and accumulate co-occurrence
-    for (segment, track), (other_segment, other_track) in annotation.co_iter(other):
+    for (segment, track), (id_segment, id_conf) in annotation.co_iter(identification):
         i = I[annotation[segment, track]]
-        j = J[other[other_segment, other_track]]
-        matrix[i, j] += 1
+        j = J[identification[id_segment, id_conf]]
+        matrix[i, j] += id_conf
 
     return matrix
 
@@ -124,7 +125,7 @@ class MajorityVoting(LateFusion):
         # find one-to-one mapping that maximes co-occurence between
         # diarization and identification using the Hungarian algorithm
         mapping = {}
-        cooccurrence = uniform_cooccurrence(diarization, identification)
+        cooccurrence = confidence_cooccurrence(diarization, identification)
         d_labels, i_labels = diarization.labels(), identification.labels()
 
         for a, b in zip(*linear_sum_assignment(-cooccurrence)):
