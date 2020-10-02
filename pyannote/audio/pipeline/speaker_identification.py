@@ -101,11 +101,11 @@ class MajorityVoting(LateFusion):
 
         # gather votes from identification
         votes = {}
-        for (d_segment, d_track), (i_segment, i_track) in diarization.co_iter(identification):
+        for (d_segment, d_track), (i_segment, i_conf) in diarization.co_iter(identification):
             d_label = diarization[d_segment, d_track]
-            i_label = identification[i_segment, i_track]
+            i_label = identification[i_segment, i_conf]
             votes.setdefault(d_label, Counter())
-            votes[d_label][i_label] += 1
+            votes[d_label][i_label] += i_conf
         # keep only the majoritarian vote
         mapping = {label: count.most_common(1)[0][0] for label, count in votes.items()}
 
